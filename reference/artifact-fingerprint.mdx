@@ -59,9 +59,9 @@ The script always prints a JSON array to stdout, one object per input path, in t
 | `is_dir` | boolean | `true` if the path is a directory |
 | `size_bytes` | integer | File size in bytes as reported by `stat` |
 | `mtime_utc` | string | Last-modified time in ISO-8601 format with UTC offset (`+00:00`) |
-| `sha256` | string | Full lowercase hex SHA-256 digest of the file contents |
+| `sha256` | string | Full lowercase hex SHA-256 digest of the file contents. Only present when `is_file` is `true`. |
 
-The `sha256` field is computed by reading the file in 1 MiB chunks to support large files without loading the entire content into memory.
+The `sha256` field is computed by reading the file in 1 MiB chunks to support large files without loading the entire content into memory. It is omitted for directories (`is_dir: true`) even when the path exists.
 
 ## Missing files
 

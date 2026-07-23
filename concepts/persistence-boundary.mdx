@@ -1,7 +1,7 @@
 ---
 title: "The persistence boundary and simulated PreToolUse gate"
 sidebarTitle: "Persistence Boundary"
-description: "Understand exactly which outputs trigger the Canon Boundary Guard gate, why a simulated gate exists in ChatGPT Projects, and what happens when the gate runs."
+description: "Learn which outputs trigger the Canon Boundary Guard gate, why a simulated gate exists in ChatGPT Projects, and what happens when the gate runs."
 ---
 
 GPT Projects do not expose a user-defined pre-write hook. Canon Boundary Guard therefore defines a **simulated PreToolUse gate** at the semantic persistence boundary — the point where content stops being ephemeral and starts being reusable or durable. Everything before that boundary is conversation, scratch, or calculation. Everything at or past it requires the gate to run first.
@@ -22,6 +22,7 @@ This means the gate's effectiveness depends entirely on the assistant correctly 
 
 The gate must run before producing any of the following:
 
+- **File writes intended as durable output** — any write that is meant to produce a lasting result rather than a temporary or scratch artifact
 - **Downloadable final artifacts** — any file the user is expected to save and use outside the session
 - **Canvas or document output intended for reuse** — Canvas content, structured documents, or long-form outputs the operator may save or share
 - **Project Source candidates** — content being proposed for upload to Project files
@@ -31,7 +32,6 @@ The gate must run before producing any of the following:
 - **Any output marked `[SAFE TO SAVE]`** — the label itself is a gate output and requires the gate to have passed first
 - **Project Instructions text** — content intended to update or replace Project-level instructions
 - **GPT Project adapter text** — content updating the adapter configuration
-- **`SESSION_STATE` or `CANON_STATE_DELTA` content** — any structured state payload
 
 ---
 

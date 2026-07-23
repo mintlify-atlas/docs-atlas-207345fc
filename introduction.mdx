@@ -37,10 +37,10 @@ Silent promotion is especially hard to notice because it does not happen all at 
 
 The frame separates information into distinct provenance layers before anything is written to a persistent artifact, Project Source, Canvas output, or state file:
 
-- **L0 — Inspected evidence**: Project files and sources actively inspected in the current task, local files, command and tool output, schemas, diagnostics, and verified external sources. A Project Source is only L0 for the specific surface inspected right now — its presence in the project is not evidence by itself.
+- **L0 — Inspected evidence**: Project files and sources actively inspected in the current task, local files, git state, tests, schemas, lockfiles, diagnostics, command and tool output, and verified external sources. A Project Source is only L0 for the specific surface inspected right now — its presence in the project is not evidence by itself.
 - **L1 — Chat material**: The current conversation, prior project chats, moved chats, brainstorming, assistant analysis, project memory, and any recovery text not yet brought through the gate. L1 is not canon by default.
 - **L1A — Operator-approved delta**: Conversation material that the operator explicitly authorized for persistence in the current turn. Authorization applies only to the stated scope.
-- **L2 — Agent-control instructions**: Instructions, steering reminders, or constraints that shape how the assistant behaves. L2 is not project content unless the operator explicitly asks for it to be persisted as agent-facing instructions.
+- **L2 — Agent-control instructions**: Instructions, steering, reminders, or constraints that shape how the assistant behaves. L2 is not project content unless the operator explicitly asks for it to be persisted as agent-facing instructions.
 - **L3 — Model assumptions**: Unverified model memory, generic best practice, assumed framework behavior, version claims, or unstated conventions not grounded in inspected evidence.
 
 ## How it is delivered

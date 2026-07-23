@@ -1,7 +1,7 @@
 ---
-title: "Session lifecycle and the Status Check bootstrap"
+title: "Session Lifecycle: Bootstrap, Gate Events, and Re-entry"
 sidebarTitle: "Session Lifecycle"
-description: "Understand how a Canon Boundary Guard-enabled session starts, progresses through gate checks, and handles re-entry after a break."
+description: "Understand how a Canon Boundary Guard session starts, progresses through gate events, and how to handle re-entry after a context break."
 ---
 
 Every Canon Boundary Guard-enabled ChatGPT session follows a predictable lifecycle. Understanding the phases helps you work with the frame rather than against it — knowing when the gate will fire, when state is persisted, and what happens when you return to a session after a break.
@@ -14,13 +14,13 @@ The bootstrap sequence follows these steps in order:
 
 1. **Locate the bundle.** Find `canon-boundary-guard-gpt/` through Project Sources and/or `/mnt/data`.
 2. **Extract if needed.** If only the zip is available in `/mnt/data`, extract it as a source-staged extraction before proceeding.
-3. **Record source identity.** If source-staged extraction is used, record the source zip path or source id, and hash if available, before treating any extracted surface as L0. If no anchor is available, declare the missing anchor and limit L0 to the inspected path with a risk note.
+3. **Record source identity.** If source-staged extraction is used, record the source zip path or source id, and hash if available, before treating any extracted surface as L0. If no anchor is available, limit L0 to the inspected path with a risk note.
 4. **Inspect `SKILL.md`.** Read the skill entrypoint and load gate mechanics from it — not from model memory.
 5. **Inspect `references/protocol.md`.** Load the full provenance layer definitions, dossier rules, and contamination checks.
 6. **Inspect `references/gpt-project-adapter.md`.** Load the GPT Project-specific persistence boundary, bootstrap rules, and save-label triggers.
 7. **Inspect the latest `SESSION_STATE.json` if available.** Restore context from the working state file or accept a pasted CANON_STATE_DELTA as recovery material.
-8. **Determine path: first install or re-entry.** If no SESSION_STATE exists, apply the first-install rule. If one exists, restore from it. If this is not a fresh install and no valid state is found, enter recovery mode.
-9. **Confirm bootstrap result.** Report which sources were inspected and the outcome. Do not assume gate mechanics from memory.
+8. **Initialize working state if first install.** If no SESSION_STATE exists, create a new working state only when the operator declares a fresh install, or when the current task is initial bundle installation and there is no prior-state claim. Initialize it only after `references/state-and-recovery.md` and `schemas/SESSION_STATE.schema.json` have been inspected. Validate with `scripts/validate_state.py` if available. Register the inspected bootstrap surfaces in `active_l0_sources` — do not use an empty array after bootstrap.
+9. **Provide proof-of-read if persistence is requested.** Do not assume gate mechanics from memory.
 
 ## First-install vs re-entry
 

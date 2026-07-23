@@ -1,5 +1,5 @@
 ---
-title: "How Canon Boundary Guard works under the hood"
+title: "How Canon Boundary Guard Works: Architecture and Flow"
 sidebarTitle: "How It Works"
 description: "Understand the source-bundle model, the Status Check bootstrap, the simulated PreToolUse gate, and how provenance layers flow through a session."
 ---
@@ -34,7 +34,7 @@ The Status Check proceeds in this order:
 4. **Inspect `SKILL.md`.** Read `canon-boundary-guard-gpt/SKILL.md` — the operating rules entry point for the frame.
 5. **Inspect `protocol.md`.** Read `canon-boundary-guard-gpt/references/protocol.md` — the full provenance layer definitions, mode rules, dossier format, and decontamination checks.
 6. **Inspect `gpt-project-adapter.md`.** Read `canon-boundary-guard-gpt/references/gpt-project-adapter.md` — the GPT Project-specific persistence boundary, runtime zones, and save-label rules.
-7. **Inspect `SESSION_STATE` if available.** Check for an existing `/mnt/data/_SESSION_STATE.json` and, if present, read it to restore working state for the session.
+7. **Inspect `SESSION_STATE` if available.** Check for an existing `SESSION_STATE.json` and, if present, inspect it.
 8. **Initialize working state only on first install.** If no `SESSION_STATE` exists, create a new working state at `/mnt/data/_SESSION_STATE.json` only when the operator declares a fresh install, or when the current task is the initial bundle installation and there is no prior-state claim. This requires also inspecting `references/state-and-recovery.md` and `schemas/SESSION_STATE.schema.json`, validating the created state with `scripts/validate_state.py` if available, and registering the inspected bootstrap surfaces in `active_l0_sources`. A first-install state with an empty `active_l0_sources` array is not valid.
 
 If any required source cannot be inspected, the bootstrap fails and ChatGPT enters read-only mode — it can answer questions and inspect files, but it cannot produce persistent output or mark anything `[SAFE TO SAVE]`.
@@ -47,12 +47,14 @@ The gate classifies the provenance of all material involved in the output, deter
 
 The gate runs before any of these **persistence triggers**:
 
+- **File writes intended as durable output** — any write that is meant to be a lasting result rather than scratch work
 - **Project Source candidates** — output intended to be saved back to Project Sources
-- **Downloadable artifacts** — files intended for download and reuse outside the session
-- **Canvas or document updates** — Canvas content intended for reuse
-- **Protocol, naming, architecture, or workflow decisions** — any reusable spec, policy, naming rule, or invariant
+- **Downloadable final artifacts** — files intended for download and reuse outside the session
+- **Canvas updates intended for reuse** — Canvas content intended for reuse
+- **Reusable docs, specs, or prompts** — any document, specification, or prompt intended for ongoing use
+- **Protocol, naming, architecture, workflow, or invariant changes** — any reusable spec, policy, naming rule, or invariant
 - **State or recovery operations** — writes to `SESSION_STATE` or `CANON_STATE_DELTA`
-- **Scratch-to-canon promotion** — any file moving out of `/mnt/data/scratch/**` toward a permanent destination
+- **Promotion from `/mnt/data/scratch/**`** — any file moving out of the scratch zone toward a canon or final destination
 - **`[SAFE TO SAVE]` outputs** — any response that would carry the safe-to-save label
 
 The gate does **not** run for temporary scratch operations, private intermediate calculations, disposable test outputs, or ordinary conversational replies.
