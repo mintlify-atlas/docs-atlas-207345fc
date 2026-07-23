@@ -1,0 +1,133 @@
+---
+title: "Session lifecycle and the Status Check bootstrap"
+sidebarTitle: "Session Lifecycle"
+description: "Understand how a Canon Boundary Guard-enabled session starts, progresses through gate checks, and handles re-entry after a break."
+---
+
+Every Canon Boundary Guard-enabled ChatGPT session follows a predictable lifecycle. Understanding the phases helps you work with the frame rather than against it — knowing when the gate will fire, when state is persisted, and what happens when you return to a session after a break.
+
+## Phase 1 — Bootstrap (Status Check)
+
+When a new chat starts inside a Project that has Canon Boundary Guard installed, ChatGPT runs Status Check before producing any substantive output. Status Check is not optional: if it cannot complete, the session enters read-only mode.
+
+The bootstrap sequence follows these steps in order:
+
+1. **Locate the bundle.** Find `canon-boundary-guard-gpt/` through Project Sources and/or `/mnt/data`.
+2. **Extract if needed.** If only the zip is available in `/mnt/data`, extract it as a source-staged extraction before proceeding.
+3. **Record source identity.** If source-staged extraction is used, record the source zip path or source id, and hash if available, before treating any extracted surface as L0. If no anchor is available, declare the missing anchor and limit L0 to the inspected path with a risk note.
+4. **Inspect `SKILL.md`.** Read the skill entrypoint and load gate mechanics from it — not from model memory.
+5. **Inspect `references/protocol.md`.** Load the full provenance layer definitions, dossier rules, and contamination checks.
+6. **Inspect `references/gpt-project-adapter.md`.** Load the GPT Project-specific persistence boundary, bootstrap rules, and save-label triggers.
+7. **Inspect the latest `SESSION_STATE.json` if available.** Restore context from the working state file or accept a pasted CANON_STATE_DELTA as recovery material.
+8. **Determine path: first install or re-entry.** If no SESSION_STATE exists, apply the first-install rule. If one exists, restore from it. If this is not a fresh install and no valid state is found, enter recovery mode.
+9. **Confirm bootstrap result.** Report which sources were inspected and the outcome. Do not assume gate mechanics from memory.
+
+## First-install vs re-entry
+
+The bootstrap path diverges based on the availability of a prior SESSION_STATE.
+
+<Tabs>
+  <Tab title="First Install">
+    **Condition:** no SESSION_STATE exists and the operator has declared a fresh install, or the current task is initial bundle installation with no prior-state claim.
+
+    After steps 1–7 above complete successfully, ChatGPT also:
+
+    - Inspects `canon-boundary-guard-gpt/references/state-and-recovery.md`
+    - Inspects `canon-boundary-guard-gpt/schemas/SESSION_STATE.schema.json`
+    - Creates a new working state at `/mnt/data/_SESSION_STATE.json`
+    - Populates `active_l0_sources` with all inspected bootstrap surfaces (SKILL.md, protocol.md, gpt-project-adapter.md, state-and-recovery.md, SESSION_STATE.schema.json)
+    - Validates the created state using `scripts/validate_state.py` if the script is available
+
+    The newly created state is working state only — not durable canon. It must be explicitly exported and re-uploaded, or saved as a Project Source through the gate, before it can persist across sessions.
+  </Tab>
+  <Tab title="Re-entry">
+    **Condition:** a valid SESSION_STATE.json is found (either in Project Sources or uploaded at the start of the chat).
+
+    ChatGPT reads the existing state file and restores context from it:
+
+    - `active_l0_sources` is re-loaded to know which sources were previously inspected
+    - `authorized_deltas`, `open_conflicts`, and `pending_decisions` are restored
+    - `state_seq` is read to ensure any new delta increments correctly
+    - `last_persistent_artifacts` is available for reference
+
+    The session continues from the prior state. ChatGPT does not re-run the full first-install path. It does still run Status Check on the bundle sources to confirm the frame is intact.
+  </Tab>
+  <Tab title="Recovery Mode">
+    **Condition:** this is not a fresh install and no valid SESSION_STATE is available. The state file may be missing, corrupt, or a pasted CANON_STATE_DELTA may be invalid.
+
+    ChatGPT enters **read-only recovery mode**:
+
+    - Inspects Project Sources and uploaded files
+    - Lists missing state and explains recovery options
+    - Prepares a recovery plan for the operator
+
+    It will not write persistent artifacts, mark anything `[SAFE TO SAVE]`, perform Mode B/C persistence, reconstruct state from chat memory, or infer previously approved decisions from prior discussion.
+
+    To exit recovery mode, supply one of the accepted recovery sources: an uploaded `SESSION_STATE.json`, a pasted `CANON_STATE_DELTA` with a valid `current_state` object, or an explicit operator-authorised L1A reconstruction.
+  </Tab>
+</Tabs>
+
+## Phase 2 — Working session
+
+Once bootstrap succeeds, the session enters normal operation. The frame stays quiet during ordinary conversation — planning, questions, critique, and clarification do not trigger the gate.
+
+The gate fires automatically when a **persistence trigger** is detected. Triggers include:
+
+- A markdown code block in the response
+- JSON, YAML, TOML, XML, SQL, Python, shell, or schema-like content
+- Protocol, policy, architecture, naming, workflow, state, or invariant definitions
+- File contents intended for copy or save
+- Project Instructions or GPT Project adapter text
+- SESSION_STATE or CANON_STATE_DELTA content
+- A response produced after "Promote this draft to canon"
+- An operator request for final, spec, saveable, or canon output
+
+When none of these triggers are present, ChatGPT responds conversationally without surfacing gate labels.
+
+## Phase 3 — Persistence gate events
+
+Each time a persistence trigger fires, the frame classifies the output by mode and applies a save label:
+
+- **Mode A** — mechanical L0-only operation. Proceed silently. Label: `[SAFE TO SAVE]` if gate passes.
+- **Mode B** — semantic reorganisation of L0. Produce a compact dossier if persistence is involved.
+- **Mode C** — promotion of L1, L1A, L2, or L3 material into persistent content. Produce a full dossier and stop unless the operator has explicitly authorised the delta.
+
+For Mode B and Mode C decisions, ChatGPT emits a `CANON_STATE_DELTA` block after the state-changing event. The delta is a self-contained snapshot that can be used as recovery material in a future session.
+
+```text
+── CANON_STATE_DELTA ──────────────────────────────────────────────
+type        : CANON_STATE_DELTA
+seq         : 3
+timestamp   : 2025-09-14T11:42:00Z
+basis       : SESSION_STATE seq=2
+decision    : Mode B — promoted L0 spec draft to /mnt/data/canon/api-spec-v1.md
+operator_action_required : false
+current_state : { ... full SESSION_STATE object ... }
+[STATE DELTA - SAVE/PASTE ONLY AS RECOVERY MATERIAL]
+────────────────────────────────────────────────────────────────────
+```
+
+Save labels applied to output are exactly one of:
+
+| Label | Meaning |
+|---|---|
+| `[SAFE TO SAVE]` | Gate passed; all material is L0 or operator-approved. |
+| `[DO NOT SAVE - L1/L3 PRESENT]` | Non-L0 material present; gate has not cleared it. |
+| `[STATE DELTA - SAVE/PASTE ONLY AS RECOVERY MATERIAL]` | This block is recovery material, not canon content. |
+| `[DRAFT - REQUIRES OPERATOR APPROVAL]` | Output requires explicit operator sign-off before promotion. |
+
+## Phase 4 — Session end and state durability
+
+When the chat ends or the session context clears, `/mnt/data/_SESSION_STATE.json` is gone. Working state is not durable by itself.
+
+<Note>
+State is not automatically durable. You must take an explicit action to preserve state across sessions. If you close a chat without saving state, the next chat will either run the first-install path again (if you declare a fresh install) or enter recovery mode.
+</Note>
+
+To preserve state across sessions, choose one of these options:
+
+1. **Download and re-upload.** Ask ChatGPT to make `SESSION_STATE.json` available for download, save it locally, then upload it at the start of the next chat.
+2. **Save as a Project Source.** Ask ChatGPT to save the state file as a Project Source. This goes through the gate first and requires explicit operator authorisation.
+3. **Keep a CANON_STATE_DELTA.** Copy the last `[STATE DELTA - SAVE/PASTE ONLY AS RECOVERY MATERIAL]` block from the session. Paste it at the start of the next chat as recovery material.
+
+See [State and Recovery](/guides/state-and-recovery) for full instructions on each option and on how recovery mode works.

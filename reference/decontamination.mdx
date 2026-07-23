@@ -1,0 +1,97 @@
+---
+title: "Decontamination: detecting and removing non-L0 residue"
+sidebarTitle: "Decontamination"
+description: "Reference list of conversation residue, agent-control residue, version ghosts, model-prior claims, and filesystem promotion ghosts that must be flagged before persistence."
+---
+
+Before persisting any output, Canon Boundary Guard checks for contamination — phrases or patterns that indicate non-L0 material has entered the content. Contaminated content cannot be marked `[SAFE TO SAVE]` and must not be written to canon without operator review and explicit authorization. This page lists each contamination category, the phrases that trigger a flag, and the conditions under which contaminated phrases are permitted.
+
+## Conversation residue
+
+The following phrases indicate that L1 material — content sourced from the current or prior conversation rather than from inspected L0 evidence — may have entered the output:
+
+```text
+as discussed
+as said before
+from the previous session
+come detto prima
+come discusso
+l'utente vuole
+```
+
+When any of these phrases appear in output targeted for persistence, flag them before writing. Either remove the phrase and ground the claim in L0, obtain explicit L1A authorization from the operator, or escalate to Mode C with a full dossier.
+
+## Agent-control residue
+
+The following phrases indicate that L2 material — behavioral steering, reminders, or agent-facing instructions — may have leaked into project content:
+
+```text
+remember to
+I should
+ricordati
+devo
+non devo
+temporary instructions to the agent
+```
+
+L2 material is not project content. If any of these phrases appear in output intended as a durable project artifact, flag and remove them unless the operator explicitly requested agent-facing operating instructions. In that case, record the authorization in the dossier under `Authorized delta`.
+
+## Version ghosts
+
+Any version number, release identifier, or API version claimed in output that is not found in an actively inspected L0 source is a potential L3 ghost. This includes:
+
+- Software version numbers (e.g., `v3.2.1`, `Python 3.11`, `Node 20`)
+- Framework or library release names
+- Schema version fields
+- API version strings
+
+Version ghosts are especially dangerous because they appear precise and factual while being sourced entirely from model memory. If a version claim cannot be traced to an inspected source, tag it `[L3]` and either remove it, verify it against an inspected source, or obtain explicit operator approval before persisting.
+
+## Model-prior claims
+
+The following phrases indicate that L3 material — unverified model memory, generic conventions, or assumed best practices — may have entered the output:
+
+```text
+best practice
+standard approach
+recommended
+modern convention
+industry standard
+normally
+usually
+```
+
+```text
+```
+
+These phrases are allowed only when they are directly grounded in inspected L0 evidence (for example, a project specification that explicitly uses the phrase), explicitly approved by the operator as L1A in the current turn, or intentionally written in a historical or migration context where the phrase is being documented as a prior state rather than asserted as current guidance.
+
+Outside those three contexts, flag the phrase and either remove it, replace it with a specific L0-grounded claim, or escalate to Mode C.
+
+## Filesystem promotion ghosts
+
+The following phrases indicate a forbidden direct filesystem promotion — moving content from scratch space to canon without running the gate:
+
+```text
+copied from scratch
+moved from scratch
+renamed into canon
+archived from scratch
+included from scratch
+```
+
+Promotion from `/mnt/data/scratch/**` to any canon or final destination requires the gate to run first. If any of these phrases appear in a write operation, block the write, verify that the gate was run for the content being promoted, and restate the dossier with the correct promotion record.
+
+## When contamination is allowed
+
+A contaminated phrase does not automatically invalidate output. Contamination is permitted in exactly three contexts:
+
+1. **Grounded in L0** — the phrase or claim appears verbatim in an inspected L0 source and is being faithfully reproduced, not asserted independently.
+2. **Explicitly approved as L1A** — the operator granted explicit authorization in the current turn for the specific scope containing the phrase, and the authorization is recorded in the dossier under `Authorized delta`.
+3. **Intentionally written in historical or migration context** — the phrase is documenting a prior state, a deprecated convention, or a migration baseline rather than asserting current guidance. This context must be clearly marked in the output and recorded in the dossier.
+
+Outside these three contexts, flagged material must be removed or escalated before the output can proceed to persistence.
+
+<Note>
+  For the full persistence rules that govern what may and may not be written to durable artifacts, see the [Protocol reference](/reference/protocol).
+</Note>

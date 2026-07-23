@@ -1,0 +1,138 @@
+---
+title: "How Canon Boundary Guard works under the hood"
+sidebarTitle: "How It Works"
+description: "Understand the source-bundle model, the Status Check bootstrap, the simulated PreToolUse gate, and how provenance layers flow through a session."
+---
+
+Canon Boundary Guard works by giving ChatGPT an explicit protocol document to follow — a document that lives inside the `canon-boundary-guard-gpt/` zip rather than in model memory. Because the protocol is inspected fresh from the bundle at the start of every session, the frame does not depend on what ChatGPT remembers from training or prior conversations. The rules are read from source each time, classified by the same provenance layers each time, and applied through the same gate each time.
+
+## The source-bundle model
+
+The frame is distributed as a single zipped folder — `canon-boundary-guard-gpt.zip` — uploaded to ChatGPT Project Sources. At runtime, ChatGPT locates the bundle through the Project Sources retrieval system and/or `/mnt/data`. The expected entry point after extraction is:
+
+```text
+canon-boundary-guard-gpt/SKILL.md
+```
+
+If the bundle is only available as a zip inside `/mnt/data` (rather than as an already-extracted folder in Project Sources), ChatGPT performs a **source-staged extraction** before bootstrap: it extracts the zip into `/mnt/data/` and records the source zip path, source ID, and hash before treating any extracted file as `L0` evidence. This anchoring step is what distinguishes a source-staged extraction — a mechanical view of a verified uploaded source — from arbitrary scratch files that happen to be in `/mnt/data`.
+
+The zip file itself, the Project Source record, and the extracted files in `/mnt/data` are not canon by default. They become `L0` only for the specific surface that ChatGPT actively inspects during the current task. Presence in Project Sources is not evidence by itself.
+
+<Info>
+  Assistant-generated scratch artifacts written to `/mnt/data/scratch/**` during a session are never treated as `L0` evidence, even if they happen to contain content that looks like source material.
+</Info>
+
+## The Status Check bootstrap
+
+Before producing any substantive output in a new Project session, ChatGPT must run the **Status Check** — a mandatory inspection sequence that establishes the provenance frame for the session. The Status Check cannot be skipped or deferred. If it fails, ChatGPT enters read-only mode.
+
+The Status Check proceeds in this order:
+
+1. **Locate the bundle.** Find `canon-boundary-guard-gpt/` in Project Sources or `/mnt/data`.
+2. **Extract if needed.** If only a zip is available in `/mnt/data`, extract it as a source-staged extraction before proceeding.
+3. **Record source identity.** If source-staged extraction was used, record the source zip path or source ID, and the hash if available, before treating extracted surfaces as `L0`. If no anchor is available, declare the missing anchor and limit `L0` to the inspected path with a risk note.
+4. **Inspect `SKILL.md`.** Read `canon-boundary-guard-gpt/SKILL.md` — the operating rules entry point for the frame.
+5. **Inspect `protocol.md`.** Read `canon-boundary-guard-gpt/references/protocol.md` — the full provenance layer definitions, mode rules, dossier format, and decontamination checks.
+6. **Inspect `gpt-project-adapter.md`.** Read `canon-boundary-guard-gpt/references/gpt-project-adapter.md` — the GPT Project-specific persistence boundary, runtime zones, and save-label rules.
+7. **Inspect `SESSION_STATE` if available.** Check for an existing `/mnt/data/_SESSION_STATE.json` and, if present, read it to restore working state for the session.
+8. **Initialize working state only on first install.** If no `SESSION_STATE` exists, create a new working state at `/mnt/data/_SESSION_STATE.json` only when the operator declares a fresh install, or when the current task is the initial bundle installation and there is no prior-state claim. This requires also inspecting `references/state-and-recovery.md` and `schemas/SESSION_STATE.schema.json`, validating the created state with `scripts/validate_state.py` if available, and registering the inspected bootstrap surfaces in `active_l0_sources`. A first-install state with an empty `active_l0_sources` array is not valid.
+
+If any required source cannot be inspected, the bootstrap fails and ChatGPT enters read-only mode — it can answer questions and inspect files, but it cannot produce persistent output or mark anything `[SAFE TO SAVE]`.
+
+## The simulated PreToolUse gate
+
+Codex exposes a `PreToolUse` hook that lets a skill inject context before any write operation executes. GPT Projects do not offer an equivalent user-defined pre-write hook. Canon Boundary Guard therefore defines a **simulated PreToolUse gate** at the semantic persistence boundary: a classification and decision step that ChatGPT runs before producing any output that could become durable.
+
+The gate classifies the provenance of all material involved in the output, determines which operating mode applies, and either proceeds silently or produces a provenance dossier for the operator to review.
+
+The gate runs before any of these **persistence triggers**:
+
+- **Project Source candidates** — output intended to be saved back to Project Sources
+- **Downloadable artifacts** — files intended for download and reuse outside the session
+- **Canvas or document updates** — Canvas content intended for reuse
+- **Protocol, naming, architecture, or workflow decisions** — any reusable spec, policy, naming rule, or invariant
+- **State or recovery operations** — writes to `SESSION_STATE` or `CANON_STATE_DELTA`
+- **Scratch-to-canon promotion** — any file moving out of `/mnt/data/scratch/**` toward a permanent destination
+- **`[SAFE TO SAVE]` outputs** — any response that would carry the safe-to-save label
+
+The gate does **not** run for temporary scratch operations, private intermediate calculations, disposable test outputs, or ordinary conversational replies.
+
+## Provenance flows through the session
+
+Every piece of information in a session has a provenance layer. The gate evaluates that layer and assigns an operating mode that determines what happens next.
+
+<Steps>
+
+<Step title="Source arrives">
+  Information enters the session — from an inspected Project file, the current chat, an operator-approved statement, an agent-control instruction, or a model assumption.
+</Step>
+
+<Step title="Classified by layer">
+  The gate assigns a provenance layer:
+  - **L0** — Inspected evidence from a verified source in the current task.
+  - **L1** — Conversation material, project memory, brainstorming, or assistant analysis — not canon.
+  - **L1A** — Conversation material the operator explicitly approved for persistence this turn.
+  - **L2** — Agent-control instructions shaping assistant behavior — not project content.
+  - **L3** — Unverified model assumptions, version claims, generic best practice, or unstated conventions.
+</Step>
+
+<Step title="Gate evaluates mode">
+  The gate selects the operating mode based on what is in the output:
+  - **Mode A** — All material has clear `L0` provenance. No dossier required.
+  - **Mode B** — Semantic reorganization of existing `L0` evidence. A compact dossier is produced if persistence is involved.
+  - **Mode C** — Promotion of `L1`, `L1A`, `L2`, or `L3` into persistent content. A full dossier is produced and ChatGPT stops before writing unless the operator has explicitly authorized the delta.
+</Step>
+
+<Step title="Outcome">
+  - **Mode A** — ChatGPT proceeds silently. No gate output is shown.
+  - **Mode B** — ChatGPT produces a compact provenance dossier listing evidence, sources, and any relevant proof-of-read, then writes the output.
+  - **Mode C** — ChatGPT produces a full dossier (target, mode, evidence, authorized delta, rejected shaping, rejected model prior, conflicts, decision needed) and stops. The operator must explicitly authorize the delta before ChatGPT writes the output.
+</Step>
+
+</Steps>
+
+Every output that passes the gate for persistence receives exactly one **save label**, applied deterministically when a trigger is present (code blocks, JSON/YAML/schema content, protocol definitions, file content, state material, or explicit operator requests for final/saveable output):
+
+| Label | Meaning |
+|---|---|
+| `[SAFE TO SAVE]` | Gate passed; output contains only `L0` or explicitly authorized material. |
+| `[DO NOT SAVE - L1/L3 PRESENT]` | Output contains unapproved conversation residue or model priors. |
+| `[STATE DELTA - SAVE/PASTE ONLY AS RECOVERY MATERIAL]` | State snapshot; keep for recovery, not as canon. |
+| `[DRAFT - REQUIRES OPERATOR APPROVAL]` | Promotion candidate pending explicit authorization. |
+
+## Read-only recovery mode
+
+If a session is not a fresh install and no valid `SESSION_STATE` is available when the session starts, ChatGPT enters **read-only recovery mode**. This is a protective posture, not an error: the frame has no verified working state to build on, so it refuses to produce persistent outputs until state is recovered.
+
+In read-only recovery mode ChatGPT can:
+- Answer questions and inspect files.
+- List and describe Project Sources and `/mnt/data` contents.
+- Produce ordinary conversational output.
+
+It cannot:
+- Write persistent artifacts, Canvas outputs, or Project Source candidates.
+- Mark anything `[SAFE TO SAVE]`.
+- Treat any material as canonically approved.
+
+State can be recovered from three sources, in order of preference:
+
+1. **Uploaded `SESSION_STATE.json`** — the operator uploads a previously exported state file.
+2. **Pasted `CANON_STATE_DELTA` block** — the operator pastes a delta block that includes a valid `current_state` object conforming to `SESSION_STATE.schema.json`.
+3. **Explicit operator reconstruction marked as `L1A`** — the operator explicitly approves a reconstruction of state from available evidence, acknowledged as an authorized delta for the current turn.
+
+State reconstructed from chat history alone is not accepted. Recovery must come through one of these verified paths.
+
+<CardGroup cols={2}>
+  <Card title="Source Classes" icon="layer-group" href="/concepts/source-classes">
+    Full definitions of L0, L1, L1A, L2, and L3 with examples and inline-tagging rules.
+  </Card>
+  <Card title="Operating Modes" icon="traffic-light" href="/concepts/modes">
+    When Mode A, B, and C apply, what each dossier format contains, and how decontamination checks work.
+  </Card>
+  <Card title="Persistence Boundary" icon="shield-halved" href="/concepts/persistence-boundary">
+    The complete list of persistence triggers, the runtime zone model, and save-label rules.
+  </Card>
+  <Card title="State and Recovery" icon="rotate-left" href="/guides/state-and-recovery">
+    How to export session state, recover from a missing SESSION_STATE, and validate state files with the Python helpers.
+  </Card>
+</CardGroup>

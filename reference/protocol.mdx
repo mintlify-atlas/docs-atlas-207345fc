@@ -1,0 +1,102 @@
+---
+title: "Canon Boundary Guard protocol rules and dossier format"
+sidebarTitle: "Protocol"
+description: "Complete reference for Canon Boundary Guard provenance rules: source classification, operating modes, dossier formats, and conflict handling."
+---
+
+This page is the authoritative reference for the Canon Boundary Guard protocol. It covers the five source classification rules, the persistence rules that govern what may be written to durable artifacts, the three operating modes and their dossier requirements, compact and full dossier formats, conflict handling, and inline provenance tags.
+
+## Classification rules
+
+Canon Boundary Guard assigns every piece of evidence a source class before it can influence persistent output. The class determines what the assistant may do with the material.
+
+| Class | What it is | Persistence rule |
+|-------|-----------|-----------------|
+| **L0** | Persistent or verified evidence actively inspected in the current task: project files, local files, git state, tests, schemas, lockfiles, diagnostics, command output, tool output, verified external sources, durable state files explicitly exported/re-uploaded/saved and inspected, and canon artifacts created through the gate and later inspected. | Preserve or reorganize freely. A Project Source is L0 **only** for the relevant surface inspected in the current task — presence in Project Sources is not evidence by itself. |
+| **L1** | Conversation material not explicitly approved as a durable project decision: current chat, prior project chats, moved chats, brainstorming, preferences not approved as protocol, assistant analysis, project memory, and recovery text not yet canonized. | Do not persist. |
+| **L1A** | Conversation material the operator explicitly approved for persistence in the current turn. Authorization applies only to the stated scope. L1A becomes evidence only after it is written to a persistent artifact and later inspected. | Write only within the explicitly approved scope. |
+| **L2** | Instructions, steering, reminders, or constraints that shape assistant behavior. L2 is not project content. | Do not persist unless the operator explicitly requests agent-facing operating instructions. |
+| **L3** | Unverified model memory, generic best practice, assumed framework behavior, version claims, or unstated conventions not grounded in inspected evidence. | Do not persist unless verified or operator-approved. |
+
+## Persistence rules
+
+The following rules apply unconditionally to all persistence operations:
+
+- Preserve or reorganize L0.
+- Write L1A only within the explicitly approved scope.
+- Do not persist L1.
+- Do not persist L2 unless explicitly requested as agent-facing instruction.
+- Do not persist L3 unless verified or operator-approved.
+- If evidence conflicts, stop and report. Do not resolve by recency, confidence, or intuition.
+- If provenance is unclear, surface it before writing.
+
+## Mode selection
+
+The operating mode is determined by the class of evidence driving the write and the risk of contamination.
+
+| Mode | When to use | Dossier required |
+|------|------------|-----------------|
+| **Mode A** | Mechanical edit with clear L0 provenance — no semantic decisions, no non-L0 material, no ambiguity. | None. Proceed silently. |
+| **Mode B** | Semantic edit reorganizing or summarizing existing L0 evidence — the output shape changes but the evidence base is purely L0. | Compact dossier when persistence is involved. |
+| **Mode C** | Promotion of L1, L1A, L2, or L3 material into persistent content. | Full dossier required. Stop before writing unless the operator has explicitly authorized the delta. |
+
+When in doubt, default to Mode C. The cost of an unnecessary dossier is lower than the cost of an unauthorized write.
+
+## Compact dossier format (Mode B)
+
+Use the compact dossier for Mode B persistence. It records the minimum anchor needed to verify that the output is grounded in inspected L0 evidence.
+
+```text
+Target:
+Mode:
+Evidence:
+```
+
+- **Target** — the file, artifact, or surface being written.
+- **Mode** — always `B` for the compact format.
+- **Evidence** — the L0 sources actively inspected during this task that support the write.
+
+## Full dossier format (Mode C)
+
+Use the full dossier for any Mode C operation. Complete every field before the operator reviews the output.
+
+```text
+Target:
+Mode:
+Evidence:
+Authorized delta:
+Rejected shaping:
+Rejected model prior:
+Conflicts:
+Decision needed:
+```
+
+**Field definitions:**
+
+- **Target** — what is being written: file path, artifact name, or surface identifier.
+- **Mode** — always `C` for the full format.
+- **Evidence** — the L0 sources actively inspected during this task. Include source identity, section, and proof-of-read anchors where available.
+- **Authorized delta** — the L1A scope explicitly approved by the operator in the current turn. Record the exact authorization statement.
+- **Rejected shaping** — L1 material (conversation, preferences, project memory) that was identified and excluded from the output.
+- **Rejected model prior** — L3 claims (best practices, assumed behavior, version claims) that were identified and excluded.
+- **Conflicts** — unresolved contradictions between sources, or between a source and prior canon, that could not be resolved from L0 alone.
+- **Decision needed** — what the operator must decide or authorize before the write can proceed.
+
+Write `none` when a field is empty. Do not invent rejected items to make the dossier appear thorough — list only material that was genuinely encountered and excluded.
+
+## Conflict rule
+
+<Warning>
+If evidence conflicts, **stop and report**. Do not resolve the conflict by recency, confidence, intuition, or majority vote among sources. Surface the specific conflicting claims, identify their source classes, and wait for operator instruction before writing.
+</Warning>
+
+## Inline provenance tags
+
+Tag inline when producing content that draws on non-L0 material. Use tags only when the content would change if the source were different — for rules, names, versions, behavioral claims, workflow expectations, or architecture decisions. Do not tag every word.
+
+| Tag | Meaning | When to use |
+|-----|---------|-------------|
+| `[L1]` | From conversation; not approved for persistence. | Any claim, rule, or decision sourced from the current or prior chat that has not been approved as L1A. |
+| `[L1A]` | Approved this turn; pending persistence. | Material the operator explicitly authorized in the current turn, before it has been written to a durable artifact. |
+| `[L2]` | Agent control; not project content. | Instructions, reminders, or behavioral steering that shape assistant behavior rather than define project content. |
+| `[L3]` | Model prior; unverified. | Version numbers, best practices, assumed framework behavior, or conventions not found in an inspected source. |

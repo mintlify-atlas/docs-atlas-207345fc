@@ -1,0 +1,74 @@
+---
+title: "Deterministic save labels reference"
+sidebarTitle: "Save Labels"
+description: "Reference for the four Canon Boundary Guard save labels: when each is applied, what triggers label output, and what the labels mean for downstream handling."
+---
+
+After the simulated gate runs, Canon Boundary Guard applies exactly one deterministic save label to any output that contains a save trigger. The label tells the operator what they can safely do with the content — whether it can be committed to canon immediately, held as a draft, used only for recovery, or discarded as a working artifact. Labels are never ambiguous and never stacked: one trigger, one label.
+
+## The four labels
+
+<Tabs>
+  <Tab title="[SAFE TO SAVE]">
+    **When applied:** The gate passed. All material in the output is L0 or explicitly authorized L1A. The output was produced in Mode A or Mode B with an approved compact dossier, or in Mode C with a full dossier that the operator explicitly authorized.
+
+    **What it means:** The output can be downloaded, saved as a Project Source, or pasted into canon without further review. The gate has already verified provenance.
+
+    **Hard constraint:** Never mark `[SAFE TO SAVE]` unless the simulated gate passed. Applying this label to unverified output is a protocol violation.
+  </Tab>
+  <Tab title="[DO NOT SAVE - L1/L3 PRESENT]">
+    **When applied:** The output contains L1 or L3 material that was not authorized by the operator. The gate was triggered but did not pass because non-L0 evidence is present.
+
+    **What it means:** Treat the output as a working draft only. Do not save it to Project Sources, do not download it as a final artifact, and do not paste it into canon. Identify and remove the L1/L3 material, obtain authorization, or restart from inspected L0 sources before retrying.
+  </Tab>
+  <Tab title="[STATE DELTA - SAVE/PASTE ONLY AS RECOVERY MATERIAL]">
+    **When applied:** The output contains a `CANON_STATE_DELTA` block — a structured record of session state changes intended for recovery use.
+
+    **What it means:** Save or paste the output only for state recovery purposes. It is not project content and must not be treated as a canonical source. Follow the recovery procedures in `references/state-and-recovery.md` before promoting any state delta to canon.
+  </Tab>
+  <Tab title="[DRAFT - REQUIRES OPERATOR APPROVAL]">
+    **When applied:** The output contains L1A material that was identified and scoped but has not yet received explicit operator gate authorization, or Mode C output for which a full dossier was produced but the operator has not yet approved the write.
+
+    **What it means:** Do not treat the output as canon until the operator explicitly approves. Review the dossier, confirm the authorized delta scope, and re-run the gate after approval before saving.
+  </Tab>
+</Tabs>
+
+## Trigger conditions
+
+Labels are applied **only** when deterministic triggers are present in the response. If no trigger is present, no label is applied regardless of content. The following conditions each constitute a trigger:
+
+- Response contains a markdown code block
+- Response contains JSON, YAML, TOML, XML, SQL, Python, shell, or schema-like content
+- Response defines protocol, policy, architecture, naming, workflow, state, invariants, or operating rules
+- Response contains file contents intended for copy/save
+- Response contains Project Instructions text
+- Response contains GPT Project adapter text
+- Response contains `SESSION_STATE` or `CANON_STATE_DELTA`
+- Response is produced after "Promote this draft to canon"
+- Operator explicitly asked for final/spec/saveable/canon output
+- Response creates or modifies a reusable artifact specification
+
+When a deterministic trigger is present and the output contains non-L0 material, stop before producing the final form unless the operator explicitly authorized the delta.
+
+## No-label cases
+
+The following response types do not receive a label unless a deterministic trigger listed above is also present:
+
+- Ordinary conversational replies
+- Critique or feedback on existing content
+- Planning and exploration
+- Clarification questions and answers
+
+<Note>
+  A planning reply that happens to contain a markdown code block **does** carry a trigger. The content type alone does not exempt a response from labeling — check for triggers first.
+</Note>
+
+## Exactly one label
+
+<Note>
+  Every triggered response receives **exactly one** save label. Labels are never combined, stacked, or made conditional. If multiple conditions apply, use the most restrictive label that accurately reflects the gate result: `[DO NOT SAVE - L1/L3 PRESENT]` takes precedence over `[DRAFT - REQUIRES OPERATOR APPROVAL]`, which takes precedence over `[STATE DELTA - SAVE/PASTE ONLY AS RECOVERY MATERIAL]`, which takes precedence over `[SAFE TO SAVE]`.
+</Note>
+
+<Warning>
+  `[SAFE TO SAVE]` must **never** be applied unless the simulated gate passed. When in doubt about gate status, apply `[DRAFT - REQUIRES OPERATOR APPROVAL]` and surface the uncertainty in the dossier.
+</Warning>

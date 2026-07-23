@@ -1,47 +1,138 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get started with Canon Boundary Guard"
+sidebarTitle: "Quickstart"
+description: "Set up Canon Boundary Guard in a ChatGPT Project in five steps: zip the bundle, upload it, paste the instructions, and start a new chat."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+By the end of this guide you will have a working Canon Boundary Guard-enabled ChatGPT Project. ChatGPT will inspect the source bundle at the start of every new session, apply the provenance frame defined in the protocol documents, and run the simulated gate before any persistent output. The whole setup takes less than ten minutes.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+<Step title="Clone or download the repository">
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+Clone the Canon Boundary Guard repository to your local machine:
 
-    ```bash
-    your-cli start
-    ```
-  </Step>
+```bash
+git clone https://github.com/xxyoudeadpunkxx/canon-boundary-guard-for-gpt-project.git
+```
+
+If you prefer not to use Git, download the repository as a zip from the GitHub page and extract it. Either way, you need the `canon-boundary-guard-gpt/` folder and the `PROJECT_CUSTOM_INSTRUCTIONS.txt` file at the repository root.
+
+</Step>
+
+<Step title="Create the zip bundle">
+
+Zip the `canon-boundary-guard-gpt/` folder. The zip must preserve the folder structure so that ChatGPT can find `canon-boundary-guard-gpt/SKILL.md` after extraction.
+
+<CodeGroup>
+
+```bash macOS / Linux
+# Run from the repository root
+zip -r canon-boundary-guard-gpt.zip canon-boundary-guard-gpt/
+```
+
+```powershell Windows (PowerShell)
+# Run from the repository root
+Compress-Archive -Path .\canon-boundary-guard-gpt\ -DestinationPath .\canon-boundary-guard-gpt.zip
+```
+
+</CodeGroup>
+
+After zipping, confirm that the archive contains a top-level `canon-boundary-guard-gpt/` directory with `SKILL.md` at `canon-boundary-guard-gpt/SKILL.md`.
+
+</Step>
+
+<Step title="Upload the zip to ChatGPT Project Sources">
+
+1. Open [ChatGPT](https://chatgpt.com) and navigate to the Project you want to enable Canon Boundary Guard for. If you do not have a Project yet, create one first via the left sidebar under **Projects**.
+2. Inside the Project, open the Project settings (the pencil or gear icon near the Project name).
+3. Find the **Sources** or **Files** section — this is where files attached to the Project live and are available across all chats in that Project.
+4. Upload `canon-boundary-guard-gpt.zip` to that section.
+
+Once uploaded, the zip will be available to ChatGPT across all chats in the Project. ChatGPT will locate and extract it during the Status Check bootstrap at the start of each new session.
+
+</Step>
+
+<Step title="Paste the Project Instructions">
+
+1. Still in the Project settings, find the **Instructions** field (sometimes labeled **Custom Instructions** or **Project Instructions**).
+2. Open `PROJECT_CUSTOM_INSTRUCTIONS.txt` from the repository root in a text editor.
+3. Select all the contents and paste them into the Instructions field. Replace any existing content.
+4. Save the Project settings.
+
+The instruction anchor begins with:
+
+```text
+Use `canon-boundary-guard-gpt/SKILL.md` as the active provenance-control skill
+for this Project.
+
+This Project uses a source-bundle skill model:
+- the folder `canon-boundary-guard-gpt/` is distributed as a zip
+- the zip is uploaded to Project Sources
+- when file runtime is available, locate the zip or extracted folder through
+  Project Sources and/or `/mnt/data`
+- if only the zip is available in `/mnt/data`, extract it before bootstrap as a
+  source-staged extraction
+```
+
+These instructions tell ChatGPT where to find the bundle, how to extract it if needed, and that it must run the Status Check bootstrap before any substantive output in a new session.
+
+</Step>
+
+<Step title="Start a new chat">
+
+Open a new chat inside the Project. You do not need to say anything special — the Status Check bootstrap runs automatically at the start of the first substantive output.
+
+ChatGPT will:
+1. Locate `canon-boundary-guard-gpt/` in Project Sources or `/mnt/data`.
+2. Extract the zip if only a zip is available, recording the source zip path and hash for the source-staged extraction.
+3. Inspect `SKILL.md`, `references/protocol.md`, and `references/gpt-project-adapter.md`.
+4. Check for an existing `SESSION_STATE.json`.
+5. Report that the frame is active and ready.
+
+Once the Status Check completes, you can use the Project normally. The frame operates quietly for ordinary conversation and surfaces only when something crosses a provenance boundary.
+
+</Step>
+
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Manual chat setup (without a Project)
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+If you do not have access to ChatGPT Projects, you can still use the frame in a normal ChatGPT conversation by uploading the zip directly to the chat and asking ChatGPT to inspect it:
+
+1. Start a new conversation in ChatGPT.
+2. Upload `canon-boundary-guard-gpt.zip` as a file attachment.
+3. Send a message such as: *"Please inspect the canon-boundary-guard-gpt bundle in the uploaded zip and use it as the active provenance-control frame for this session."*
+
+ChatGPT will extract the zip, inspect the protocol documents, and confirm the frame is active.
+
+<Warning>
+  Manual chat mode is significantly less stable than a Project setup. In a normal chat, the instruction anchor lives only inside the conversation itself — it is not reinforced by persistent Project Instructions. If the conversation grows long, or if you start a new chat, the frame anchor is gone and must be re-established manually. Use a ChatGPT Project for any serious or ongoing work.
+</Warning>
+
+## Verifying the frame is active
+
+After starting a new chat, look for a Status Check output before the first substantive response. It should list the sources ChatGPT inspected and confirm which operating mode is available. A typical bootstrap report looks like this:
+
+```text
+Status Check — Canon Boundary Guard
+
+Bundle located: /mnt/data/canon-boundary-guard-gpt/ (source-staged extraction
+from canon-boundary-guard-gpt.zip, source id: [project-source-id], hash recorded)
+
+Inspected:
+  - canon-boundary-guard-gpt/SKILL.md
+  - canon-boundary-guard-gpt/references/protocol.md
+  - canon-boundary-guard-gpt/references/gpt-project-adapter.md
+
+SESSION_STATE: not found — first-install or recovery required before
+persistent writes.
+
+Frame active. Operating under provenance-control rules. Ready for your task.
+```
+
+If you see a message saying the bundle could not be located, or that ChatGPT is entering read-only mode, verify that the zip was uploaded correctly to Project Sources and that the Project Instructions were saved. See the [How It Works](/how-it-works) page for details on what happens when bootstrap fails.
+
+<Note>
+  Want to understand exactly what happens during the Status Check bootstrap, how provenance layers flow through the simulated gate, and what read-only recovery mode means? Read [How Canon Boundary Guard works under the hood](/how-it-works).
+</Note>

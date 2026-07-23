@@ -1,0 +1,135 @@
+---
+title: "validate_state.py — SESSION_STATE and CANON_STATE_DELTA validator"
+sidebarTitle: "validate_state.py"
+description: "Reference for validate_state.py: validates SESSION_STATE.json and CANON_STATE_DELTA files against their schemas, with jsonschema or strict manual fallback."
+---
+
+`validate_state.py` is an optional Python utility that mechanically validates `SESSION_STATE` and `CANON_STATE_DELTA` files against their schemas. It uses `jsonschema` when available and falls back to a strict manual validator when the package is not installed. It does not decide provenance — it only performs structural checks.
+
+<Note>
+  This is a mechanical helper only. A file that passes validation is structurally correct, but structural correctness does not mean the state accurately reflects what was inspected or authorized. Provenance decisions remain the operator's responsibility.
+</Note>
+
+## Usage
+
+```bash
+# Validate a SESSION_STATE file
+python validate_state.py --state SESSION_STATE.json
+
+# Validate a CANON_STATE_DELTA file
+python validate_state.py --delta CANON_STATE_DELTA.json
+
+# Validate both files in one invocation
+python validate_state.py --state SESSION_STATE.json --delta CANON_STATE_DELTA.json
+
+# Emit a machine-readable JSON report
+python validate_state.py --state SESSION_STATE.json --json
+```
+
+## Arguments
+
+<ParamField path="--state" type="path">
+  Path to a `SESSION_STATE.json` file to validate. The file is read as UTF-8 (with BOM handling) and validated against `SESSION_STATE.schema.json`. At least one of `--state` or `--delta` must be provided.
+</ParamField>
+
+<ParamField path="--delta" type="path">
+  Path to a `CANON_STATE_DELTA.json` file to validate. The file is validated against `CANON_STATE_DELTA.schema.json` and an additional cross-field check confirms that `current_state.state_seq` equals `delta.seq`. At least one of `--state` or `--delta` must be provided.
+</ParamField>
+
+<ParamField path="--json" type="flag">
+  Emit a JSON report (`{"valid": true/false, "errors": [...]}`) instead of human-readable output. Useful for programmatic consumption in CI pipelines or pre-save hooks.
+</ParamField>
+
+## Output
+
+<Tabs>
+  <Tab title="Human-readable">
+    When `--json` is not passed, the script prints `valid` on success, or `invalid` followed by a bullet list of error messages on failure.
+
+    **Valid output:**
+    ```
+    valid
+    ```
+
+    **Invalid output:**
+    ```
+    invalid
+    - SESSION_STATE.active_l0_sources[0]: missing required key: source_type
+    - SESSION_STATE: current_state.state_seq should equal delta.seq (2 != 3)
+    ```
+  </Tab>
+  <Tab title="JSON report">
+    When `--json` is passed, the script emits a single JSON object to stdout.
+
+    **Valid:**
+    ```json
+    {
+      "valid": true,
+      "errors": []
+    }
+    ```
+
+    **Invalid:**
+    ```json
+    {
+      "valid": false,
+      "errors": [
+        "SESSION_STATE.active_l0_sources[0]: missing required key: source_type",
+        "CANON_STATE_DELTA: current_state.state_seq should equal delta.seq (2 != 3)"
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Validation behavior
+
+### JSON parsing
+
+Files are read with `encoding="utf-8-sig"`, which silently strips a UTF-8 BOM if present. Files that cannot be parsed as valid JSON produce an error entry and fail immediately without proceeding to schema validation.
+
+### jsonschema path
+
+When the `jsonschema` package is importable, the script uses `jsonschema.Draft202012Validator` to perform full JSON Schema Draft 2020-12 validation. This path supports the complete schema feature set and produces error messages rooted at the path of each failing node.
+
+### Strict manual fallback
+
+When `jsonschema` is not installed, the script uses an internal strict validator that supports the following JSON Schema keywords:
+
+| Supported keyword | Notes |
+|---|---|
+| `$schema` | Recognized but not evaluated |
+| `title` / `description` | Recognized but not evaluated |
+| `type` | Checked for `object`, `array`, `string`, `integer`, `number`, `boolean`, `null` |
+| `required` | All listed keys must be present |
+| `properties` | Recursively validated for keys present in the instance |
+| `additionalProperties` | `false` rejects any key not listed in `properties` |
+| `const` | Exact equality check |
+| `enum` | Membership check |
+| `minimum` | Numeric lower bound (inclusive) |
+| `items` | Applied to every element of an array |
+
+Any schema keyword outside this set causes the validator to return an error for that node rather than silently skipping the check. This is the **fail-closed** behavior: an unknown schema feature is treated as a validation failure, not as a pass-through.
+
+### Additional cross-field check (CANON_STATE_DELTA)
+
+After schema validation, the script performs one cross-field check that is not expressible in JSON Schema: `current_state.state_seq` must equal `delta.seq`. If they differ, a validation error is appended even if the document is otherwise schema-valid.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | All supplied files are valid |
+| `1` | At least one file is invalid, or a file could not be read |
+
+## Schema paths
+
+The script resolves schema files relative to its own location:
+
+```
+scripts/validate_state.py
+schemas/SESSION_STATE.schema.json    ← ../schemas/SESSION_STATE.schema.json
+schemas/CANON_STATE_DELTA.schema.json ← ../schemas/CANON_STATE_DELTA.schema.json
+```
+
+The script must be run from inside the bundle directory tree. If the schema files are not found at the expected relative paths, the script will fail with a file-not-found error rather than falling back to a permissive validator.

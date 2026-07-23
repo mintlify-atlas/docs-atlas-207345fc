@@ -1,0 +1,203 @@
+---
+title: "CANON_STATE_DELTA schema reference"
+sidebarTitle: "CANON_STATE_DELTA"
+description: "Complete field reference for CANON_STATE_DELTA.schema.json — the self-contained snapshot delta emitted after every Mode B or Mode C state change."
+---
+
+`CANON_STATE_DELTA.schema.json` defines the structure of snapshot delta blocks emitted after every Mode B or Mode C state-changing decision. A valid delta includes a full `current_state` object that itself validates against `SESSION_STATE.schema.json`, and serves as durable recovery material that can be used to restore a lost working state without operator-level reconstruction.
+
+## Top-level required fields
+
+<ParamField path="type" type="string" required>
+  Constant value: `"CANON_STATE_DELTA"`. Any other value causes schema validation to fail. Used by parsers and recovery tools to identify the document type without inspecting its contents.
+</ParamField>
+
+<ParamField path="seq" type="integer" required>
+  Sequence number for this delta, `minimum: 1`. Must exactly equal `current_state.state_seq`. `validate_state.py` enforces this constraint as an additional cross-field check.
+</ParamField>
+
+<ParamField path="timestamp" type="string" required>
+  ISO-8601 timestamp recording when this delta was emitted. Example: `"2025-07-14T11:42:00+00:00"`.
+</ParamField>
+
+<ParamField path="basis" type="object" required>
+  Reference to the state that existed immediately before this delta was applied. Contains:
+
+  <Expandable title="basis fields">
+    <ParamField path="basis.previous_seq" type="integer" required>
+      The `state_seq` value of the prior state, `minimum: 0`. For the first delta, this is `0`.
+    </ParamField>
+    <ParamField path="basis.previous_hash" type="string">
+      Optional SHA-256 hash of the prior `_SESSION_STATE.json`, in the format `"sha256:<hex>"`. When present, allows mechanical verification that no state was silently skipped.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="decision" type="object" required>
+  Describes the Mode B or Mode C decision that triggered this state change. See the [decision object](#decision-object) section below.
+</ParamField>
+
+<ParamField path="current_state" type="object" required>
+  The full `SESSION_STATE` object as it exists after this delta was applied. Must independently validate against `SESSION_STATE.schema.json`. This is the field that makes the delta self-contained for recovery — it is not a diff, it is a complete snapshot.
+</ParamField>
+
+<ParamField path="operator_action_required" type="string" required>
+  Human-readable instruction telling the operator what they must do to make this state durable. Example: `"Download _SESSION_STATE.json and re-upload as a Project Source, or paste this delta block into the next session."`.
+</ParamField>
+
+## decision object
+
+The `decision` object captures the rationale and scope of the change. `additionalProperties` is `false`.
+
+<ParamField path="decision.mode" type="string" required>
+  The operating mode under which this decision was made. Enum:
+
+  | Value | Meaning |
+  |---|---|
+  | `"B"` | Mode B — operator-reviewed state change with explicit authorization |
+  | `"C"` | Mode C — structured persistence with full provenance gate |
+</ParamField>
+
+<ParamField path="decision.summary" type="string" required>
+  A concise human-readable description of what was decided. Should be specific enough to identify the decision when reading a sequence of deltas. Example: `"Operator authorized addition of chapter-3 outline as project source."`.
+</ParamField>
+
+<ParamField path="decision.authorized_delta" type="string" required>
+  The exact scope of what was authorized, as stated by the operator. This is the authoritative record of what was approved and should not be paraphrased.
+</ParamField>
+
+<ParamField path="decision.affected_targets" type="array" required>
+  Array of strings identifying the artifacts or sources affected by this decision. Each string should be a path or label that maps to an entry in `current_state.active_l0_sources` or `current_state.last_persistent_artifacts`. May be an empty array if the decision has no direct artifact targets (e.g., a conflict resolution).
+</ParamField>
+
+## Differential-only deltas
+
+<Warning>
+  A delta that includes only the changes since the previous state — without a complete `current_state` object — is **not** valid as recovery material. The schema requires `current_state` to be a full `SESSION_STATE` object, not a partial diff. If `current_state` is absent or incomplete, `validate_state.py` will reject the delta, and a conformant adapter must treat it as L1 recovery text only — not as a structured recovery source.
+</Warning>
+
+## seq consistency
+
+The `seq` field at the top of the delta and `current_state.state_seq` inside the embedded state must be identical. This invariant allows recovery tools to detect sequence gaps without having to inspect the full state contents.
+
+`validate_state.py` enforces this as an explicit post-schema check:
+
+```python
+if current_state.get("state_seq") != delta.get("seq"):
+    errors.append(
+        f"current_state.state_seq should equal delta.seq "
+        f"({current_state.get('state_seq')} != {delta.get('seq')})"
+    )
+```
+
+If they differ, the delta is invalid regardless of whether it otherwise validates against `CANON_STATE_DELTA.schema.json`.
+
+## Complete example
+
+```json
+{
+  "type": "CANON_STATE_DELTA",
+  "seq": 3,
+  "timestamp": "2025-07-14T11:42:00+00:00",
+  "basis": {
+    "previous_seq": 2,
+    "previous_hash": "sha256:a3f2c91e4d7b08f5e6321abc90d1fedc3b2a5876f4109ce78d23b65091a4fc2e"
+  },
+  "decision": {
+    "mode": "C",
+    "summary": "Operator authorized chapter-3-outline.md as a new project source.",
+    "authorized_delta": "Add chapter-3-outline.md to project sources; no existing sources are modified.",
+    "affected_targets": [
+      "canon-project/chapter-3-outline.md"
+    ]
+  },
+  "current_state": {
+    "protocol": "canon-boundary-guard:gpt-project-adapter",
+    "protocol_version": "1.1",
+    "state_seq": 3,
+    "updated_at": "2025-07-14T11:42:00+00:00",
+    "active_l0_sources": [
+      {
+        "source_id": "canon-boundary-guard-gpt/SKILL.md",
+        "source_type": "project_file",
+        "status": "inspected"
+      },
+      {
+        "source_id": "canon-boundary-guard-gpt/references/protocol.md",
+        "source_type": "project_file",
+        "status": "inspected"
+      },
+      {
+        "source_id": "canon-boundary-guard-gpt/references/gpt-project-adapter.md",
+        "source_type": "project_file",
+        "status": "inspected"
+      },
+      {
+        "source_id": "canon-boundary-guard-gpt/references/state-and-recovery.md",
+        "source_type": "project_file",
+        "status": "inspected"
+      },
+      {
+        "source_id": "canon-boundary-guard-gpt/schemas/SESSION_STATE.schema.json",
+        "source_type": "project_file",
+        "status": "inspected"
+      },
+      {
+        "source_id": "canon-project/chapter-3-outline.md",
+        "source_type": "project_source",
+        "status": "inspected",
+        "notes": "Added via Mode C gate at seq 3."
+      }
+    ],
+    "authorized_deltas": [
+      {
+        "delta_id": "delta-1",
+        "authorized_at": "2025-07-14T09:15:00+00:00",
+        "scope": "Bootstrap — initial L0 source registration",
+        "status": "persisted"
+      },
+      {
+        "delta_id": "delta-2",
+        "authorized_at": "2025-07-14T10:30:00+00:00",
+        "scope": "Add chapter-2-draft.md as project source",
+        "status": "persisted",
+        "target": "canon-project/chapter-2-draft.md"
+      },
+      {
+        "delta_id": "delta-3",
+        "authorized_at": "2025-07-14T11:42:00+00:00",
+        "scope": "Add chapter-3-outline.md as project source",
+        "status": "pending_persistence",
+        "target": "canon-project/chapter-3-outline.md"
+      }
+    ],
+    "open_conflicts": [],
+    "pending_decisions": [],
+    "last_persistent_artifacts": [
+      {
+        "artifact_id": "artifact-1",
+        "artifact_type": "project_source",
+        "created_at": "2025-07-14T10:30:00+00:00",
+        "path_or_label": "chapter-2-draft.md (Project Source)"
+      },
+      {
+        "artifact_id": "artifact-2",
+        "artifact_type": "state_file",
+        "created_at": "2025-07-14T10:30:00+00:00",
+        "path_or_label": "/mnt/data/_SESSION_STATE.json"
+      }
+    ],
+    "last_state_hash": "sha256:a3f2c91e4d7b08f5e6321abc90d1fedc3b2a5876f4109ce78d23b65091a4fc2e"
+  },
+  "operator_action_required": "Download _SESSION_STATE.json and re-upload as a Project Source, or save this delta block for recovery use in the next session."
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="SESSION_STATE schema" icon="file-code" href="/reference/session-state-schema">
+    Field reference for the SESSION_STATE object embedded in every valid delta.
+  </Card>
+  <Card title="validate_state.py" icon="circle-check" href="/reference/validate-state">
+    Mechanical validator for SESSION_STATE and CANON_STATE_DELTA files, including the seq consistency check.
+  </Card>
+</CardGroup>

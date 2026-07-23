@@ -1,0 +1,140 @@
+---
+title: "Working with scratch and canon zones in /mnt/data"
+sidebarTitle: "Scratch and Canon"
+description: "Learn the /mnt/data runtime layout, what scratch files are, how canon zone output is created, and the rules for promoting scratch work through the gate."
+---
+
+ChatGPT's file runtime provides a `/mnt/data` directory that persists for the duration of a session. Canon Boundary Guard divides this directory into zones with different rules for evidence, persistence, and promotion. Understanding these zones is essential when you are working with generated files, transformations, or any output you intend to save or reuse.
+
+## Runtime layout
+
+Canon Boundary Guard defines three distinct zones inside `/mnt/data`:
+
+| Zone | Path | Purpose |
+|---|---|---|
+| Scratch | `/mnt/data/scratch/**` | Disposable workspace. Non-canon. Mode A by default. Scratch files are not evidence. |
+| Canon | `/mnt/data/canon/**` | Guarded candidate outputs. Requires gate approval before a file is created or updated. |
+| Working state | `/mnt/data/_SESSION_STATE.json` | Working session state only. Not durable. Not canon. |
+
+These zones are enforced through the simulated gate at the semantic persistence boundary, not through filesystem permissions. ChatGPT is responsible for respecting zone rules.
+
+## Scratch zone rules
+
+The scratch zone is where ChatGPT performs intermediate work: parsing, transformations, calculations, tests, and draft generation. None of this work is evidence unless it was directly sourced from an inspected L0 surface.
+
+**Allowed scratch uses:**
+
+- Temporary extraction of uploaded or Project Source files
+- Parsing and format conversion
+- Intermediate calculations
+- Test runs and validation checks
+- Draft generation
+- Intermediate transforms
+- Staging files before inspection
+
+**Assistant-generated scratch artifacts are not evidence.** A file written by ChatGPT into `/mnt/data/scratch/` during the session is not an L0 source. It cannot be treated as inspected evidence simply because it resides in `/mnt/data`.
+
+<Note>
+**Source-staged extraction exception.** If the Canon Boundary Guard bundle zip is only available inside `/mnt/data`, it can be extracted into the scratch zone as a source-staged extraction. That extracted copy may support L0 inspection, but only as a mechanical view of the uploaded or Project Source zip it came from — anchored to the source zip's path, source id, or hash. Before treating any extracted surface as L0, ChatGPT must record the source zip path or source id and hash if available. If no anchor is available, it must declare the missing anchor and limit L0 to the inspected path with a risk note. This exception applies to the inspected source surface only; other scratch artifacts remain non-evidence.
+</Note>
+
+## The promotion boundary
+
+Any movement from scratch to canon is a **promotion event** and requires gate classification. Promotion is not limited to explicit file copies — it includes any action that causes scratch-zone content to become persistent, reusable, or citable.
+
+The following actions count as promotion:
+
+- Copying a scratch file to a canon path
+- Summarising scratch content into a response intended for save
+- Exporting scratch content as a downloadable artifact
+- Citing scratch content as evidence in a spec, protocol, or decision
+- Embedding scratch content in a response presented as final
+- Saving scratch content as a downloadable artifact
+- Saving scratch content as a Project Source
+- Including scratch content in an archive
+- Rendering scratch content into a Canvas or final document
+
+The promotion rule also applies transitively: a response that quotes a scratch file and is then marked `[SAFE TO SAVE]` is a promotion event. The gate must run before the response reaches its final form.
+
+## Forbidden direct promotions
+
+ChatGPT must not move, copy, rename, symlink, archive, or export files from `/mnt/data/scratch/**` to `/mnt/data/canon/**` or any final artifact path through direct filesystem operations.
+
+<Warning>
+The following operations are **forbidden** as direct scratch-to-canon promotions:
+
+```python
+os.rename("scratch/output.json", "canon/output.json")
+shutil.move("scratch/output.json", "canon/output.json")
+shutil.copy("scratch/output.json", "canon/output.json")
+# and the shell equivalents:
+# cp  scratch/output.json  canon/output.json
+# mv  scratch/output.json  canon/output.json
+# rsync scratch/ canon/
+# zip/tar creation that includes scratch files as final outputs
+# any script that bulk-copies scratch outputs into canon without gate metadata
+```
+
+These operations bypass the gate entirely. They are forbidden regardless of whether the scratch content originated from an L0 source.
+</Warning>
+
+## The allowed promotion path
+
+Promotion from scratch to canon always follows the gate sequence. There are no shortcuts.
+
+<Steps>
+  <Step title="Inspect the scratch source">
+    Read the scratch file and identify its provenance. Was it generated by ChatGPT, extracted from an L0 source, or derived from a transformation of L0 content? Record the source path and, if available, a content hash.
+  </Step>
+  <Step title="Classify the promotion mode">
+    Determine whether the promotion is:
+
+    - **Mode A** — mechanical L0-only operation (e.g. re-encoding a verified file with no semantic changes).
+    - **Mode B** — semantic reorganisation of L0 content (e.g. restructuring an inspected spec into a new format).
+    - **Mode C** — promotion of L1, L1A, L2, or L3 material into persistent content (e.g. a draft that incorporates chat analysis or model assumptions).
+  </Step>
+  <Step title="Produce the required dossier">
+    For Mode B, produce a compact dossier listing sources, provenance chain, and the nature of the reorganisation.
+
+    For Mode C, produce a full dossier and **stop** — do not write the canon file until the operator has explicitly authorised the delta.
+
+    Mode A proceeds silently without a dossier.
+  </Step>
+  <Step title="Declare the target path">
+    State the intended canon path explicitly before writing. For example: `target: /mnt/data/canon/api-spec-v1.md`. This makes the promotion intent visible and auditable.
+  </Step>
+  <Step title="Write a new output file to /mnt/data/canon/**">
+    After gate approval, write a **new file** at the declared canon path. Do not move or rename the scratch file. The canon file is freshly written from the approved content.
+  </Step>
+  <Step title="Record the promotion in SESSION_STATE / CANON_STATE_DELTA">
+    After writing the canon file, update the working state to record:
+
+    - Source path (scratch)
+    - Target path (canon)
+    - Content hash of the canon file, if available
+    - Promotion reason (the dossier summary)
+
+    For Mode B and Mode C promotions, emit a `CANON_STATE_DELTA` block.
+  </Step>
+</Steps>
+
+<Note>
+**Invariant:** No scratch artifact becomes canon by relocation. Canon artifacts are newly written after gate approval. A file that was moved or renamed from scratch is not a canon artifact — it is an uncontrolled copy that bypassed the gate.
+</Note>
+
+<CardGroup cols={2}>
+  <Card
+    title="Modes (A, B, C)"
+    icon="shield-halved"
+    href="/concepts/modes"
+  >
+    Understand how Mode A, B, and C classify gate operations and when a dossier is required.
+  </Card>
+  <Card
+    title="State and Recovery"
+    icon="hard-drive"
+    href="/guides/state-and-recovery"
+  >
+    Learn how SESSION_STATE tracks promoted artifacts and how to preserve state across sessions.
+  </Card>
+</CardGroup>

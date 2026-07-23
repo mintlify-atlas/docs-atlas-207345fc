@@ -1,0 +1,65 @@
+---
+title: "Canon Boundary Guard: Provenance Control for ChatGPT"
+sidebarTitle: "Introduction"
+description: "Learn how Canon Boundary Guard keeps project files, chat history, instructions, and model assumptions separated during long ChatGPT sessions."
+---
+
+Canon Boundary Guard is a source-bundle frame for ChatGPT Projects. It addresses a problem that emerges silently during long or complex sessions: over time, files already attached to a project, things said in the current chat, older project memory, instructions that shape assistant behavior, model assumptions, and generated drafts can all blur together into something that starts to look like accepted, authoritative truth. Canon Boundary Guard prevents that by giving ChatGPT a structured provenance frame — a zipped source bundle uploaded to Project Sources, paired with Project Instructions that anchor the frame — so every piece of information is classified before it can be treated as canon.
+
+The frame is not a native ChatGPT capability. It works by combining a `canon-boundary-guard-gpt/` zip added to your Project files with Project Instructions that tell ChatGPT to locate and inspect the bundle at the start of every new session, read the protocol documents inside it, and apply provenance classification before producing any persistent output.
+
+<CardGroup cols={2}>
+  <Card title="Get Started" icon="rocket" href="/quickstart">
+    Set up Canon Boundary Guard in a ChatGPT Project in five steps.
+  </Card>
+  <Card title="How It Works" icon="gears" href="/how-it-works">
+    Understand the source-bundle model, Status Check bootstrap, and the simulated PreToolUse gate.
+  </Card>
+  <Card title="Source Classes" icon="layer-group" href="/concepts/source-classes">
+    Learn what L0, L1, L1A, L2, and L3 mean and how each layer is treated.
+  </Card>
+  <Card title="Operating Modes" icon="traffic-light" href="/concepts/modes">
+    Understand when ChatGPT proceeds silently versus producing a provenance dossier.
+  </Card>
+</CardGroup>
+
+## The silent promotion problem
+
+In a long ChatGPT session, information does not stay neatly tagged. A hypothesis discussed early in the chat can resurface later as if it were an established project decision. A generated draft can start being treated as a finalized document. A model assumption about a framework version can slip into a spec as if it were a verified fact. This is **silent promotion**: a draft, assumption, or chat message beginning to act as if it were an approved, canonical project document — without any explicit decision having been made.
+
+Silent promotion is especially hard to notice because it does not happen all at once. It accumulates incrementally across turns, across chats within a Project, and across the boundary between what was said and what was saved.
+
+<Note>
+  Canon Boundary Guard reduces silent promotion by making provenance explicit before any persistent output is written. It is a working discipline, not a hard enforcement layer. ChatGPT can still lose context, skip instructions, or answer incorrectly. The frame makes the boundaries visible; it does not make them uncrossable.
+</Note>
+
+## What Canon Boundary Guard does
+
+The frame separates information into distinct provenance layers before anything is written to a persistent artifact, Project Source, Canvas output, or state file:
+
+- **L0 — Inspected evidence**: Project files and sources actively inspected in the current task, local files, command and tool output, schemas, diagnostics, and verified external sources. A Project Source is only L0 for the specific surface inspected right now — its presence in the project is not evidence by itself.
+- **L1 — Chat material**: The current conversation, prior project chats, moved chats, brainstorming, assistant analysis, project memory, and any recovery text not yet brought through the gate. L1 is not canon by default.
+- **L1A — Operator-approved delta**: Conversation material that the operator explicitly authorized for persistence in the current turn. Authorization applies only to the stated scope.
+- **L2 — Agent-control instructions**: Instructions, steering reminders, or constraints that shape how the assistant behaves. L2 is not project content unless the operator explicitly asks for it to be persisted as agent-facing instructions.
+- **L3 — Model assumptions**: Unverified model memory, generic best practice, assumed framework behavior, version claims, or unstated conventions not grounded in inspected evidence.
+
+## How it is delivered
+
+Canon Boundary Guard is distributed as a single zipped folder — `canon-boundary-guard-gpt.zip` — that you upload to your ChatGPT Project's Sources. Inside the zip is `SKILL.md`, a set of reference documents, JSON schemas, and optional Python validator scripts.
+
+The zip alone does nothing. The second piece is `PROJECT_CUSTOM_INSTRUCTIONS.txt`, the contents of which you paste into the Project Instructions field. Those instructions tell ChatGPT to find the bundle in Project Sources or `/mnt/data` at the start of every new session, inspect the key protocol files inside it, and treat that inspection as the foundation of the session's provenance frame. Because the protocol lives in the bundle rather than in model memory, it is read fresh each session rather than assumed from training.
+
+When you start a new chat inside the Project, ChatGPT runs a **Status Check bootstrap** automatically: it locates the bundle, extracts it if necessary, records source identity and hash for any source-staged extraction, inspects `SKILL.md`, `protocol.md`, and `gpt-project-adapter.md`, checks for an existing `SESSION_STATE`, and then reports that it is ready to work under the frame.
+
+## What it is not
+
+Canon Boundary Guard is intentionally honest about its limits:
+
+- **Not a native ChatGPT hook.** GPT Projects do not expose a user-defined pre-write hook. The gate is simulated at the semantic persistence boundary by the instructions and protocol documents — it depends on ChatGPT following the frame, not on a technical intercept.
+- **Not a guarantee.** The frame reduces silent promotion. ChatGPT can still skip instructions, lose context across turns, or produce incorrect output. Treat it as a disciplined working practice, not an enforcement mechanism.
+- **Not a browser extension or background service.** There is no plugin, no background process, and no modification to the ChatGPT interface. Everything runs inside the model, guided by the documents in the bundle and the Project Instructions you paste in.
+- **Not a Codex hook or Claude skill.** The frame does not rely on Codex's `PreToolUse` hooks or Claude's skill execution model. It is a GPT Project adaptation that works entirely through the Project Sources and Instructions system.
+
+<Tip>
+  Ready to set up the frame? Head to the [Quickstart](/quickstart) for a step-by-step walkthrough that takes you from cloning the repository to starting your first guarded session.
+</Tip>

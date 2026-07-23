@@ -1,0 +1,138 @@
+---
+title: "Set up Canon Boundary Guard in a ChatGPT Project"
+sidebarTitle: "Project Setup"
+description: "Step-by-step guide to installing Canon Boundary Guard in a ChatGPT Project: bundle the source, upload to Project Sources, configure instructions."
+---
+
+This guide walks through the full setup of Canon Boundary Guard in a ChatGPT Project, from preparing the source bundle to verifying the first Status Check. By the end you will have the frame active inside a Project, with ChatGPT inspecting the bundle before substantive output and applying provenance labels automatically.
+
+## Prerequisites
+
+- A ChatGPT account with Projects access.
+- The `canon-boundary-guard-for-gpt-project` repository — download the zip from GitHub or clone it locally.
+
+## Bundle structure
+
+The published unit is the `canon-boundary-guard-gpt/` folder. Everything the frame needs — the skill entrypoint, references, schemas, and optional validator scripts — lives inside this folder.
+
+```text
+canon-boundary-guard-gpt/
+├── SKILL.md
+├── references/
+│   ├── gpt-project-adapter.md
+│   ├── proof-of-read.md
+│   ├── protocol.md
+│   ├── scratch-canon.md
+│   └── state-and-recovery.md
+├── schemas/
+│   ├── CANON_STATE_DELTA.schema.json
+│   └── SESSION_STATE.schema.json
+└── scripts/
+    ├── artifact_fingerprint.py
+    ├── extract_proof.py
+    └── validate_state.py
+```
+
+ChatGPT uses `SKILL.md` as the entrypoint. The references and schemas are loaded on demand during the session. The Python scripts are optional mechanical helpers — they perform validation checks but do not make provenance decisions.
+
+## Step 1 — Create the zip
+
+Create a zip archive of the `canon-boundary-guard-gpt/` folder from the root of the repository.
+
+<CodeGroup>
+
+```bash macOS / Linux
+cd canon-boundary-guard-for-gpt-project
+zip -r canon-boundary-guard-gpt.zip canon-boundary-guard-gpt/
+```
+
+```powershell Windows PowerShell
+cd canon-boundary-guard-for-gpt-project
+Compress-Archive -Path canon-boundary-guard-gpt -DestinationPath canon-boundary-guard-gpt.zip
+```
+
+</CodeGroup>
+
+## Step 2 — Upload to Project Sources
+
+1. Open your ChatGPT Project.
+2. Navigate to **Files** or **Sources** (the exact label depends on your ChatGPT interface version).
+3. Click **Add files** or the upload button and select `canon-boundary-guard-gpt.zip`.
+4. Wait for the upload to complete before moving to the next step.
+
+<Note>
+The zip filename does not matter. ChatGPT locates the bundle by inspecting the contents — specifically by finding the `canon-boundary-guard-gpt/SKILL.md` entrypoint — not by filename. You can rename the zip freely without affecting bootstrap.
+</Note>
+
+## Step 3 — Add Project Instructions
+
+1. Open `PROJECT_CUSTOM_INSTRUCTIONS.txt` from the repository root in any text editor.
+2. Select all and copy the entire content.
+3. In your ChatGPT Project settings, locate the **Instructions** or **Custom Instructions** field.
+4. Paste the copied content into the field and save.
+
+<Tip>
+Paste the instructions verbatim. The instructions contain precise ordering rules, bootstrap triggers, gate mechanics, and label definitions that ChatGPT reads literally. Paraphrasing, summarising, or reorganising the content will break the frame's behaviour.
+</Tip>
+
+## Step 4 — Verify the install
+
+Start a **new chat** inside the Project. ChatGPT should run Status Check automatically before its first substantive output. A successful bootstrap produces a report listing each inspected source.
+
+```text
+── Canon Boundary Guard Status Check ──────────────────────────────
+Bundle location : Project Sources / /mnt/data/canon-boundary-guard-gpt/
+Extraction      : source-staged from uploaded zip (source id recorded)
+SKILL.md        : inspected ✓
+protocol.md     : inspected ✓
+gpt-project-adapter.md : inspected ✓
+SESSION_STATE   : not found — first-install path
+state-and-recovery.md  : inspected ✓
+SESSION_STATE.schema.json : inspected ✓
+Working state   : /mnt/data/_SESSION_STATE.json created and validated ✓
+Bootstrap result: PASS
+────────────────────────────────────────────────────────────────────
+Frame active. Ready for operator input.
+```
+
+**Successful bootstrap:** all required sources are listed as `inspected ✓`, a working state is created (first install) or restored (re-entry), and the frame reports `PASS`. ChatGPT will stay quiet during ordinary conversation and surface the gate only when a persistence trigger fires.
+
+**Failed bootstrap:** one or more required sources cannot be located or inspected. ChatGPT will report which sources are missing and enter read-only mode.
+
+<Warning>
+If bootstrap fails, ChatGPT enters read-only mode. In this state it will not produce persistent output, mark anything `[SAFE TO SAVE]`, or perform Mode B/C gate operations. To recover, verify that the zip was uploaded successfully and that `PROJECT_CUSTOM_INSTRUCTIONS.txt` was pasted in full. Delete and re-upload the zip if the bundle contents appear incomplete, then start a new chat.
+</Warning>
+
+## Manual chat setup
+
+If you do not have Projects access, you can use Canon Boundary Guard in a normal ChatGPT conversation:
+
+1. Upload `canon-boundary-guard-gpt.zip` as a file attachment in a new chat.
+2. Ask ChatGPT to inspect the bundle and use it as the active provenance-control frame for the session. For example:
+
+```text
+Please inspect the attached canon-boundary-guard-gpt.zip, extract it, read
+SKILL.md as the active frame, and apply Canon Boundary Guard provenance control
+for this session.
+```
+
+3. ChatGPT will run the equivalent of Status Check and confirm which sources were inspected.
+
+**Limitations of manual setup:** The instruction anchor lives only inside the conversation, not in a persistent Project instructions field. If the conversation context window fills, rolls over, or is continued in a new chat, the frame loses its anchor and must be re-established. State is also more fragile — there is no Project Sources upload path for SESSION_STATE.json, so manual re-paste recovery material after each break. A Project is the recommended container for any session longer than a few exchanges.
+
+<CardGroup cols={2}>
+  <Card
+    title="Session Lifecycle"
+    icon="arrow-progress"
+    href="/guides/session-lifecycle"
+  >
+    Understand the phases of a Canon Boundary Guard-enabled session, from bootstrap through persistence gate events.
+  </Card>
+  <Card
+    title="State and Recovery"
+    icon="hard-drive"
+    href="/guides/state-and-recovery"
+  >
+    Learn how SESSION_STATE works, how to make it durable, and how to recover when state is unavailable.
+  </Card>
+</CardGroup>

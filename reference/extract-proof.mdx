@@ -1,0 +1,95 @@
+---
+title: "extract_proof.py — mechanical proof-of-read extractor"
+sidebarTitle: "extract_proof.py"
+description: "Reference for extract_proof.py: extracts section headings, first/last 5 words, and line ranges from Markdown files to generate mechanical proof-of-read."
+---
+
+`extract_proof.py` extracts mechanical proof-of-read from text or Markdown files. Given a file and an optional heading, it returns the exact section heading, the first 5 words, the last 5 words, and the line range — the required fields for Canon Boundary Guard proof-of-read. The output can be embedded directly into an `active_l0_sources` entry or used to anchor a source inspection claim in a CANON_STATE_DELTA.
+
+<Note>
+  This script does not make provenance decisions. It only extracts mechanical evidence from a file's content. The operator is responsible for determining whether the extracted section constitutes valid L0 evidence.
+</Note>
+
+## Usage
+
+```bash
+# Inspect the full file
+python extract_proof.py path/to/file.md
+
+# Inspect a specific heading section
+python extract_proof.py path/to/file.md --heading "## L0 Evidence"
+
+# Emit a JSON report
+python extract_proof.py path/to/file.md --heading "## L0 Evidence" --json
+```
+
+## Arguments
+
+<ParamField path="path" type="string" required>
+  Positional argument. Path to the text or Markdown file to inspect. The file is read with `utf-8-sig` encoding. If the file does not exist, the script exits with an error message.
+</ParamField>
+
+<ParamField path="--heading" type="string">
+  Markdown heading to select, including the `#` prefix characters. Example: `"## L0 Evidence"`. If omitted, the script inspects the full file content and reports `"FULL_FILE"` as the heading.
+
+  See [Heading selection logic](#heading-selection-logic) for exact matching rules.
+</ParamField>
+
+<ParamField path="--json" type="flag">
+  Emit output as a JSON object. When omitted, output is human-readable key-value lines.
+</ParamField>
+
+## Output
+
+<Tabs>
+  <Tab title="Human-readable">
+    ```
+    source: canon-boundary-guard-gpt/references/protocol.md
+    heading: ## L0 Evidence
+    line_range: 7-25
+    first_5_words: Persistent or verified evidence inspected
+    last_5_words: and later inspected
+    word_count: 87
+    ```
+
+    Fields are printed in the order: `source`, `heading`, `line_range`, `first_5_words`, `last_5_words`, `word_count`. The `line_range` is printed as `start-end` (both inclusive, 1-based).
+  </Tab>
+  <Tab title="JSON report">
+    ```json
+    {
+      "source": "canon-boundary-guard-gpt/references/protocol.md",
+      "heading": "## L0 Evidence",
+      "line_range": [7, 25],
+      "first_5_words": ["Persistent", "or", "verified", "evidence", "inspected"],
+      "last_5_words": ["and", "later", "inspected"],
+      "word_count": 87
+    }
+    ```
+
+    In JSON mode, `line_range` is a two-element array `[start, end]` (both 1-based). `first_5_words` and `last_5_words` are arrays of strings rather than space-joined strings.
+  </Tab>
+</Tabs>
+
+## Heading selection logic
+
+When `--heading` is provided, the script uses a two-pass lookup:
+
+1. **Exact full-line match** — scans every line in the file for a line whose stripped content is identical to the `--heading` value. For example, `--heading "## L0 Evidence"` matches a line that reads exactly `## L0 Evidence` (after stripping trailing newline). This is the preferred match.
+
+2. **Heading-text match** — if no exact match is found, the script strips leading `#` characters and surrounding whitespace from both the `--heading` value and each line in the file, then matches on the resulting text. For example, `--heading "## L0 Evidence"` would match a line reading `### L0 Evidence` via this path.
+
+If neither pass finds a match, the script raises a `ValueError` and exits with an error message. To avoid ambiguity, always provide the full heading including `#` characters when the heading level is known.
+
+## Section boundary
+
+A section begins at the matched heading line and ends immediately before the next heading of **equal or higher level** (i.e., the same number of `#` characters or fewer). The final section in a file extends to the last line.
+
+The `word_count` field counts all whitespace-separated tokens in the section, **including the heading line itself**.
+
+## Short sections
+
+If a section contains 10 words or fewer in total, both `first_5_words` and `last_5_words` return the complete word list rather than truncating to 5. This prevents misleading output for very short sections such as headings with a single sentence of body text.
+
+## Encoding
+
+Files are read with `encoding="utf-8-sig"`. A UTF-8 BOM at the start of the file is silently stripped before processing. This matches the encoding behavior of `validate_state.py` and `artifact_fingerprint.py` for consistency across the toolchain.

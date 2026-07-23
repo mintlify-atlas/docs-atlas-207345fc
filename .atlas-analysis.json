@@ -1,0 +1,98 @@
+{
+  "projectType": "general",
+  "projectName": "Canon Boundary Guard for GPT Projects",
+  "projectDescription": "A source-bundle frame for ChatGPT Projects that keeps uploaded files, chat history, instructions, hypotheses, and generated drafts separated from accepted canon through a simulated provenance-control gate.",
+  "theme": "luma",
+  "primaryColor": "#4A5568",
+  "lightColor": "#EDF2F7",
+  "darkColor": "#1A202C",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "how-it-works"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/source-classes",
+              "concepts/modes",
+              "concepts/persistence-boundary"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/project-setup",
+              "guides/session-lifecycle",
+              "guides/state-and-recovery",
+              "guides/scratch-and-canon"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Protocol",
+            "pages": [
+              "reference/protocol",
+              "reference/save-labels",
+              "reference/proof-of-read",
+              "reference/decontamination"
+            ]
+          },
+          {
+            "group": "Schemas",
+            "pages": [
+              "reference/session-state-schema",
+              "reference/canon-state-delta-schema"
+            ]
+          },
+          {
+            "group": "Python Scripts",
+            "pages": [
+              "reference/validate-state",
+              "reference/extract-proof",
+              "reference/artifact-fingerprint"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Five-layer provenance classification (L0–L3 + L1A) that keeps inspected evidence separate from chat, assumptions, and agent-control instructions",
+    "Simulated PreToolUse gate that runs before persistent writes, Canvas updates, Project Source candidates, and artifact promotion",
+    "Deterministic save labels ([SAFE TO SAVE], [DO NOT SAVE - L1/L3 PRESENT], [STATE DELTA - ...], [DRAFT - REQUIRES OPERATOR APPROVAL])",
+    "SESSION_STATE JSON file with sequence numbering, active L0 sources, authorized deltas, open conflicts, and pending decisions",
+    "CANON_STATE_DELTA snapshot blocks for durable state recovery and operator audit trail",
+    "Three operating modes: Mode A (mechanical L0), Mode B (semantic L0 reorganization), Mode C (L1/L1A/L2/L3 promotion requiring explicit authorization)",
+    "Mandatory Status Check bootstrap before the first substantive output in any new Project session",
+    "Source-staged extraction rules for zip bundles in /mnt/data with anchor identity and hash requirements",
+    "Read-only recovery mode when no valid SESSION_STATE is available",
+    "Optional Python validators: validate_state.py, extract_proof.py, artifact_fingerprint.py"
+  ],
+  "publicApiSurface": [
+    "Source classes: L0 (inspected evidence), L1 (chat/memory), L1A (operator-authorized delta), L2 (agent-control), L3 (model prior)",
+    "Operating modes: Mode A, Mode B, Mode C",
+    "Save labels: [SAFE TO SAVE], [DO NOT SAVE - L1/L3 PRESENT], [STATE DELTA - SAVE/PASTE ONLY AS RECOVERY MATERIAL], [DRAFT - REQUIRES OPERATOR APPROVAL]",
+    "SESSION_STATE.schema.json — validates /mnt/data/_SESSION_STATE.json working state",
+    "CANON_STATE_DELTA.schema.json — validates CANON_STATE_DELTA snapshot blocks",
+    "validate_state.py --state <path> --delta <path> [--json]",
+    "extract_proof.py <path> [--heading <heading>] [--json]",
+    "artifact_fingerprint.py <paths...> [--indent <n>]",
+    "Runtime zones: /mnt/data/scratch/** (disposable), /mnt/data/canon/** (gate-guarded), /mnt/data/_SESSION_STATE.json (working state)",
+    "Inline provenance tags: [L1], [L1A], [L2], [L3]",
+    "Full dossier fields: Target, Mode, Evidence, Authorized delta, Rejected shaping, Rejected model prior, Conflicts, Decision needed",
+    "Proof-of-read fields: source identity, exact section heading, first 5 words, last 5 words, line range"
+  ]
+}

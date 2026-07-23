@@ -1,0 +1,132 @@
+---
+title: "Source classes: L0 through L3 and L1A explained"
+sidebarTitle: "Source Classes"
+description: "Canon Boundary Guard classifies every piece of information into one of five provenance layers. Learn what each class means and why the distinctions matter."
+---
+
+Before any persistent output, Canon Boundary Guard classifies the provenance of every piece of information being used. The five classes — **L0**, **L1**, **L1A**, **L2**, and **L3** — form a provenance hierarchy that determines how strictly the simulated gate examines content before it is allowed to become reusable or durable material. Correct classification is the foundation of every gate decision: the mode the assistant selects, the dossier it produces, and whether it proceeds or stops all flow from knowing which layer each input belongs to.
+
+---
+
+## L0 — Inspected Evidence
+
+L0 is the highest-trust class. It covers persistent or verified evidence that the assistant has **actively inspected** in the current task. Only material the assistant has actually read and verified in the present session qualifies — past familiarity, memory of a prior session, or the mere presence of a file in Project Sources does not.
+
+**Examples from `protocol.md`:**
+
+- Project files or sources
+- Local files
+- Git state
+- Tests
+- Schemas
+- Lockfiles
+- Diagnostics
+- Command output
+- Tool output
+- Verified external source
+- Durable state files explicitly exported, reuploaded, or saved and inspected
+- Canon artifacts created through the gate and later re-inspected
+
+<Note>
+  A Project Source is L0 **only for the relevant surface actively inspected in the current task**. The presence of a file in Project Sources is not evidence by itself. The assistant must open and read the specific content before that content earns L0 status.
+</Note>
+
+---
+
+## L1 — Conversation Shaping
+
+L1 covers chat and memory material that has **not** been explicitly approved as a durable project decision. It is the default class for anything that emerges from the flow of conversation — including things that feel authoritative because they were said confidently or agreed to in principle.
+
+**Examples:**
+
+- Current chat messages
+- Prior project chats
+- Moved or archived chats
+- Brainstorming and exploratory notes
+- User preferences not approved as protocol
+- Assistant analysis and summaries produced during conversation
+- Project memory
+- Recovery text not yet canonized
+
+**Rule:** L1 must not be persisted. If L1 material is heading toward a persistent artifact, the gate must stop and require explicit operator authorization before proceeding.
+
+---
+
+## L1A — Operator-Authorized Delta
+
+L1A is conversation material that the **operator has explicitly approved for persistence in the current turn**. It exists to provide a controlled path from conversation to canon without bypassing the gate entirely.
+
+Authorization for L1A is always **scoped to the stated purpose**. An approval to persist a specific design decision does not authorize the persistence of other conversation material in the same output. L1A does not inherit forward — it covers exactly what the operator named.
+
+**Rule:** L1A becomes evidence only after it has been written to a persistent artifact and later re-inspected. An operator approval alone is not yet evidence; the written and inspected artifact is.
+
+---
+
+## L2 — Agent Control
+
+L2 covers instructions, steering reminders, and constraints that **shape assistant behavior** rather than representing project content. Typical L2 material includes system-prompt instructions, session-level behavioral rules, and inline reminders telling the assistant how to operate.
+
+**Rule:** L2 is not project content. It should be persisted only when the operator explicitly requests the creation or update of agent-facing operating instructions. Including L2 material in a project document, spec, or artifact without that explicit request is a gate violation.
+
+---
+
+## L3 — Model Prior
+
+L3 covers **unverified model memory** — anything the assistant supplies from general training knowledge rather than from inspected evidence. This includes generic best practices, assumed framework behavior, version claims, and unstated conventions that are not grounded in L0 sources.
+
+**Examples of L3 material in the wild:**
+
+- "This is the standard approach for…"
+- "Version X introduced…" (without an inspected changelog)
+- "Best practice is to…"
+- "Normally, this framework expects…"
+
+**Rule:** Do not persist L3 unless it has been verified against L0 evidence or the operator has explicitly approved it as an authorized delta (L1A).
+
+---
+
+## Inline tagging
+
+When producing content that draws on non-L0 material, the assistant tags the affected claim inline using one of four markers:
+
+| Marker  | Meaning                                      |
+|---------|----------------------------------------------|
+| `[L1]`  | From conversation — not approved for persistence |
+| `[L1A]` | Approved this turn — pending persistence     |
+| `[L2]`  | Agent control — not project content          |
+| `[L3]`  | Model prior — unverified                     |
+
+**When to tag:** only when the content would change if the source were different. Tag rules, names, versions, claims about behavior, workflow expectations, and architecture decisions. Do not tag every word — routine prose does not need markers.
+
+```markdown
+## Authentication Flow
+
+Tokens expire after 15 minutes. [L3 — not verified against inspected config]
+
+The refresh endpoint is `/auth/refresh`. [L0 — confirmed in openapi.yaml line 42]
+
+Use PKCE for public clients [L3 — best practice, not in inspected spec].
+The operator has approved adopting this convention. [L1A — authorized this turn]
+```
+
+---
+
+## Class promotion rules
+
+| Class | Can it be persisted? | Condition |
+|-------|----------------------|-----------|
+| **L0** | ✅ Yes | Preserve or reorganize freely; L0 is the gate's green path |
+| **L1** | ❌ No | Must not be persisted; requires explicit operator approval and L1A upgrade |
+| **L1A** | ✅ Yes (scoped) | Only within the explicitly approved scope; becomes evidence only after written and re-inspected |
+| **L2** | ⚠️ Conditional | Only when the operator explicitly requests agent-facing operating instructions |
+| **L3** | ⚠️ Conditional | Only when verified against L0 evidence or explicitly operator-approved |
+
+---
+
+## Conflict rule
+
+<Warning>
+  If evidence conflicts between classes — for example, an L0 file contradicts an L1 conversation agreement — **stop and report**. Do not resolve the conflict by recency, confidence, intuition, or the apparent authority of the source. Surface the conflict to the operator and wait for explicit resolution before producing any persistent output.
+</Warning>
+
+Conflict resolution is always an operator decision, not an assistant inference. Silently choosing the more recent or more confident source is itself a gate violation.

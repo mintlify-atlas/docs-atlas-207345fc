@@ -1,0 +1,110 @@
+---
+title: "Operating modes: Mode A, B, and C"
+sidebarTitle: "Modes"
+description: "The three operating modes determine how much provenance scrutiny Canon Boundary Guard applies before allowing persistent output in a ChatGPT session."
+---
+
+Before any persistent write, Canon Boundary Guard classifies the operation into one of three modes. The mode determines whether the assistant proceeds silently, produces a compact dossier as a lightweight provenance record, or stops entirely and waits for explicit operator authorization. Selecting the correct mode is not discretionary — it is a mechanical consequence of what sources the output draws on.
+
+---
+
+## Mode A — Mechanical L0 operation
+
+**Definition:** The output draws entirely on inspected L0 evidence. No non-L0 material enters the persistent artifact. The operation is mechanical: extracting, copying, reformatting, or reorganizing content that is already fully inspected, without interpretation or synthesis.
+
+**Behavior:** Proceed silently. No dossier is required.
+
+**Use cases:**
+
+- Copying a field value from an inspected schema into a generated config file
+- Renaming a variable using a naming convention already defined in an L0 source
+- Extracting a list of endpoints from an inspected OpenAPI file
+- Reformatting inspected JSON to YAML without changing content
+
+Because Mode A output is mechanically derived from verified sources, it carries the lowest gate overhead. The tradeoff is strict: if *any* non-L0 material enters the artifact — even a single inferred value — the mode must escalate.
+
+---
+
+## Mode B — Semantic reorganization of L0
+
+**Definition:** The operation semantically reorganizes existing L0 evidence — drawing conclusions, rewriting structure, merging sources, or summarizing content — without introducing any L1, L2, or L3 material. The assistant is interpreting and arranging what is already inspected, not importing new assumptions.
+
+**Behavior:** Produce a **compact dossier** if persistence is involved. The compact dossier documents the target artifact, the selected mode, and the evidence list so provenance can be traced later.
+
+**Use cases:**
+
+- Summarizing an inspected requirements document into a structured spec
+- Merging two inspected schemas into a unified data model
+- Rewriting an inspected architecture diagram description into a narrative section
+
+**Compact dossier format:**
+
+```text
+Target: <artifact name or path>
+Mode: B
+Evidence: <list of inspected L0 sources used>
+```
+
+The compact dossier is intentionally lightweight. It is not a gate stop — it is a provenance receipt that stays attached to the output.
+
+---
+
+## Mode C — Promotion of non-L0 material
+
+**Definition:** The persistent output contains L1, L1A, L2, or L3 material. The assistant is promoting something from conversation, operator approval, agent-control context, or model memory into a durable artifact.
+
+**Behavior:** Produce a **full dossier** AND stop before writing unless the operator has explicitly authorized the delta in the current turn.
+
+<Note>
+  Mode C does not forbid persistence. It requires **explicit operator authorization** before the assistant proceeds. Once the operator authorizes the specific delta, the assistant may write the artifact and apply the `[SAFE TO SAVE]` label.
+</Note>
+
+**Use cases:**
+
+- Promoting a draft design decision agreed on in chat into a spec document
+- Incorporating a chat-agreed naming convention into a protocol file
+- Persisting a new workflow rule the operator proposed during the session
+- Writing a policy document that includes model-prior best-practice guidance the operator approved
+
+**Full dossier format:**
+
+```text
+Target: <artifact name or path>
+Mode: C
+Evidence: <list of inspected L0 sources used>
+Authorized delta: <L1A material explicitly approved by operator, or "none">
+Rejected shaping: <L1/L2 material excluded from the artifact, or "none">
+Rejected model prior: <L3 material excluded from the artifact, or "none">
+Conflicts: <any evidence conflicts identified, or "none">
+Decision needed: <what the operator must authorize before the assistant proceeds>
+```
+
+Write `none` when a field is empty. Do not invent rejected items — if nothing was excluded, say `none`.
+
+---
+
+## Mode selection logic
+
+Use the following decision process before every persistent write:
+
+<Steps>
+  <Step title="Does the output contain any L1, L1A, L2, or L3 material?">
+    If yes → **Mode C**. Produce the full dossier and stop pending operator authorization.
+  </Step>
+  <Step title="Does the output semantically reorganize L0 evidence?">
+    If yes (and no non-L0 material is present) → **Mode B**. Produce the compact dossier and proceed.
+  </Step>
+  <Step title="Is the operation purely mechanical L0 extraction or reformatting?">
+    If yes → **Mode A**. Proceed silently with no dossier.
+  </Step>
+</Steps>
+
+If there is any ambiguity about whether non-L0 material is present, treat the output as Mode C and surface the question to the operator before writing.
+
+---
+
+## Scratch operations
+
+Writes inside `/mnt/data/scratch/**` are **Mode A by default** and do not require a dossier. Scratch is a disposable, non-canon zone. Content there is not considered persistent output and does not trigger the gate.
+
+However, **promotion from `/mnt/data/scratch/**` to any canon or final destination always triggers the gate**, regardless of whether the scratch file was created as Mode A. At promotion time, the assistant must classify provenance fresh and select the appropriate mode for the promoted artifact.

@@ -1,0 +1,62 @@
+---
+title: "Mechanical proof-of-read requirements"
+sidebarTitle: "Proof of Read"
+description: "Canon Boundary Guard requires mechanical proof-of-read before Mode B or Mode C persistence. Learn the required fields for textual and structured sources."
+---
+
+For Mode B or Mode C persistence, Canon Boundary Guard requires mechanical proof-of-read — concrete evidence that the source was actively inspected during the current task, not recalled from memory or summarized from prior context. A paraphrase alone is never accepted as proof-of-read.
+
+## What proof-of-read is
+
+Proof-of-read is a mechanical anchor that demonstrates the assistant actually read a specific section of a specific source file, not that it remembers or can reproduce the general content of that file. It consists of exact verbatim extracts — section headings, opening words, closing words — that could only be produced by direct inspection.
+
+This matters because L3 model memory can produce convincing paraphrases of well-known documents without any active retrieval. Without a mechanical anchor, it is impossible to distinguish genuine L0 inspection from model prior masquerading as source evidence. Proof-of-read closes that gap: if the assistant cannot produce the exact first and last five words of the inspected section, the source is treated as unavailable for that write.
+
+Proof-of-read applies per source, per section. Inspecting one section of a file does not establish proof-of-read for the entire file.
+
+## Textual source requirements
+
+For each textual source section used as L0 evidence in a Mode B or Mode C dossier, provide all of the following:
+
+| Field | Requirement |
+|-------|-------------|
+| Source identity | File path, Project Source ID, or URL — enough to uniquely identify the source. |
+| Section heading | The exact heading as written in the source, including any leading `#` characters. |
+| First 5 words | The exact first five words of the inspected section body (not the heading). |
+| Last 5 words | The exact last five words of the inspected section body. |
+| Location anchor | Line numbers, byte ranges, page numbers, chunk identifiers, or file paths — whichever is available. |
+
+If the section has fewer than 10 words, quote the entire section rather than providing separate first/last excerpts.
+
+**Example:**
+
+```text
+Source: canon-boundary-guard-gpt/references/protocol.md
+Section: ## L0 Evidence
+First 5 words: Persistent or verified evidence inspected
+Last 5 words: and later inspected
+Line range: 7-25
+```
+
+## Structured or non-text source requirements
+
+For structured sources (JSON schemas, YAML configs, spreadsheets, database exports, binary artifacts), paraphrasing key names is not sufficient. Provide all of the following that are available:
+
+- **Source identity** — file path, Project Source ID, URL, or artifact identifier.
+- **Exact top-level keys, sheet names, filenames, object identifiers, or schema paths** — the structural landmarks that confirm active inspection.
+- **Hash** — SHA-256 or equivalent if available; record the hash algorithm used.
+- **Retrieval failure** — if any of the above are unavailable, declare the missing anchor explicitly rather than omitting the field.
+
+## Proof failure
+
+<Warning>
+If proof-of-read is unavailable for a source — because retrieval failed, the file cannot be located, or the assistant cannot produce the required verbatim anchors — treat the source as **unavailable**. Block persistence for any output that depended on that source, and enter read-only mode for the target artifact if necessary. Do not substitute a paraphrase, a summary, or model memory to fill the gap.
+</Warning>
+
+## Using extract_proof.py
+
+The `scripts/extract_proof.py` utility can mechanically generate proof-of-read records for Markdown files. Given a file path and section heading, it extracts the section heading as written, the first five words of the section body, the last five words, and the line range — exactly the fields required by the textual source proof format.
+
+Use `extract_proof.py` when the source is available as a file in `/mnt/data` or as an extracted Project Source bundle. Run it before constructing the dossier rather than after, so the proof anchors are available when the dossier fields are filled in.
+
+For full usage documentation, see [extract_proof.py reference](/reference/extract-proof).

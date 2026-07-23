@@ -1,0 +1,120 @@
+---
+title: "The persistence boundary and simulated PreToolUse gate"
+sidebarTitle: "Persistence Boundary"
+description: "Understand exactly which outputs trigger the Canon Boundary Guard gate, why a simulated gate exists in ChatGPT Projects, and what happens when the gate runs."
+---
+
+GPT Projects do not expose a user-defined pre-write hook. Canon Boundary Guard therefore defines a **simulated PreToolUse gate** at the semantic persistence boundary — the point where content stops being ephemeral and starts being reusable or durable. Everything before that boundary is conversation, scratch, or calculation. Everything at or past it requires the gate to run first.
+
+---
+
+## Why a simulated gate?
+
+In Codex, a PreToolUse hook fires before a tool call executes. Custom logic can inspect, modify, or block the write before it happens. GPT Projects have no equivalent mechanism — there is no user-defined callback that runs before a file write, canvas update, or downloadable artifact is produced.
+
+Canon Boundary Guard works around this by **enforcing the gate through protocol**: the assistant is instructed to classify provenance and evaluate the gate before producing any final-form output that crosses the persistence boundary. The gate is not a runtime interceptor. It is a discipline the assistant follows as part of how it structures its response.
+
+This means the gate's effectiveness depends entirely on the assistant correctly following the protocol on every applicable turn. The bootstrap requirement — inspecting `SKILL.md`, `references/protocol.md`, and `references/gpt-project-adapter.md` at the start of every new Project session — exists precisely to keep those mechanics in working memory rather than relying on the model's trained assumptions.
+
+---
+
+## What triggers the gate
+
+The gate must run before producing any of the following:
+
+- **Downloadable final artifacts** — any file the user is expected to save and use outside the session
+- **Canvas or document output intended for reuse** — Canvas content, structured documents, or long-form outputs the operator may save or share
+- **Project Source candidates** — content being proposed for upload to Project files
+- **Reusable specs, policies, workflows, naming rules, architecture, or protocols** — any document that defines how future work should be done
+- **State or recovery operations** — writes to `SESSION_STATE`, `CANON_STATE_DELTA`, or any recovery material
+- **Promotion from `/mnt/data/scratch/**` to any canon or final destination** — moving or copying scratch content into a non-scratch zone
+- **Any output marked `[SAFE TO SAVE]`** — the label itself is a gate output and requires the gate to have passed first
+- **Project Instructions text** — content intended to update or replace Project-level instructions
+- **GPT Project adapter text** — content updating the adapter configuration
+- **`SESSION_STATE` or `CANON_STATE_DELTA` content** — any structured state payload
+
+---
+
+## What does NOT trigger the gate
+
+The gate does not run for:
+
+- Temporary scratch operations inside `/mnt/data/scratch/**`
+- Private calculations, intermediate reasoning, or planning steps
+- Intermediate parsing of inputs
+- Disposable tests and throwaway experiments
+
+Ordinary conversational replies, critiques, clarifications, and planning discussion are also exempt — unless a deterministic trigger from the list above is present in the same response.
+
+---
+
+## What happens when the gate runs
+
+<Steps>
+  <Step title="Classify all sources by layer">
+    The assistant inspects every piece of information that would enter the persistent artifact and assigns each a source class: L0, L1, L1A, L2, or L3. Inline tags (`[L1]`, `[L1A]`, `[L2]`, `[L3]`) are applied to non-L0 claims.
+  </Step>
+  <Step title="Determine mode">
+    Based on the classification result, the assistant selects Mode A, B, or C. If any non-L0 material is present → Mode C. If the output is purely semantic reorganization of L0 → Mode B. If purely mechanical L0 → Mode A.
+  </Step>
+  <Step title="Mode A — proceed silently">
+    No dossier is required. The assistant writes the artifact and applies `[SAFE TO SAVE]`.
+  </Step>
+  <Step title="Mode B — produce compact dossier">
+    The assistant produces a compact dossier (target, mode, evidence list) and proceeds. The dossier is included in the response before the artifact.
+  </Step>
+  <Step title="Mode C — produce full dossier and stop">
+    The assistant produces a full dossier documenting all evidence, authorized deltas, rejected shaping, rejected model priors, conflicts, and the decision needed. It then **stops** and waits for explicit operator authorization before writing the artifact.
+  </Step>
+</Steps>
+
+---
+
+## Save labels as gate output
+
+After the gate runs, one of four deterministic labels is applied to the response. Labels are **only applied when a deterministic trigger is present** (code blocks, JSON/YAML/schema content, protocol definitions, file contents for copy/save, state payloads, etc.). Ordinary conversation is never labeled.
+
+```text
+[SAFE TO SAVE]
+[DO NOT SAVE - L1/L3 PRESENT]
+[STATE DELTA - SAVE/PASTE ONLY AS RECOVERY MATERIAL]
+[DRAFT - REQUIRES OPERATOR APPROVAL]
+```
+
+| Label | When it is applied |
+|-------|--------------------|
+| `[SAFE TO SAVE]` | The gate passed: output is entirely L0, or L1A within an authorized scope, with no unresolved conflicts. Mode A or Mode B completed, or Mode C proceeded after explicit operator authorization. |
+| `[DO NOT SAVE - L1/L3 PRESENT]` | The output contains L1 conversation material or L3 model priors that have not been authorized for persistence. The gate did not pass. |
+| `[STATE DELTA - SAVE/PASTE ONLY AS RECOVERY MATERIAL]` | The output is a `SESSION_STATE` or `CANON_STATE_DELTA` payload — structurally valid and gate-passed, but not durable project canon. It should be saved only as recovery material, not treated as an authoritative project artifact. |
+| `[DRAFT - REQUIRES OPERATOR APPROVAL]` | The output contains non-L0 material that the operator has not yet explicitly authorized. Mode C gate stop is in effect. The operator must authorize the specific delta before the assistant produces the final form. |
+
+`[SAFE TO SAVE]` must **never** be applied unless the simulated gate passed. Applying the label to content that has not been gate-evaluated is itself a protocol violation.
+
+---
+
+## CBG does not prevent UI saves
+
+<Warning>
+  The gate controls **canon recognition**, not the ChatGPT UI. A user can copy or save any response from the ChatGPT interface regardless of what label is applied. Material saved from the UI without gate approval does not become canon — it remains L1 or recovery material unless it is later admitted through the gate by being written to a persistent artifact, re-inspected, and confirmed as L0 in a subsequent task.
+</Warning>
+
+This is an architectural limit of GPT Projects. Canon Boundary Guard reduces silent promotion; it does not provide hard enforcement. The label system and dossier discipline exist to make the provenance status of every output unambiguous, so that operators can make informed decisions about what to save and what to treat as conversation material.
+
+---
+
+<CardGroup cols={2}>
+  <Card
+    title="Save Labels reference"
+    icon="tag"
+    href="/reference/save-labels"
+  >
+    Full reference for all four deterministic save labels, trigger conditions, and no-label cases.
+  </Card>
+  <Card
+    title="Protocol reference"
+    icon="shield-halved"
+    href="/reference/protocol"
+  >
+    Complete provenance protocol: layers, rules, dossier formats, decontamination patterns, and conflict handling.
+  </Card>
+</CardGroup>

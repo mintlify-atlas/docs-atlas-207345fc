@@ -1,0 +1,177 @@
+---
+title: "Manage SESSION_STATE and recover from lost context"
+sidebarTitle: "State and Recovery"
+description: "Learn how Canon Boundary Guard tracks session state, how to preserve state across sessions, and how to recover when SESSION_STATE is unavailable."
+---
+
+Canon Boundary Guard tracks session context in a JSON state file. This guide explains the state model, how to keep state durable across ChatGPT sessions, and how to recover when the state is unavailable. Understanding the state lifecycle is essential for any session longer than a single conversation.
+
+## The working state file
+
+Canon Boundary Guard maintains a working copy of the session state at `/mnt/data/_SESSION_STATE.json`. This file is written and updated during the session but is **not durable by itself** — when the chat ends or the file runtime resets, it is gone.
+
+The schema-minimal shape of a SESSION_STATE object is:
+
+```json
+{
+  "protocol": "canon-boundary-guard:gpt-project-adapter",
+  "protocol_version": "1.1",
+  "state_seq": 0,
+  "updated_at": "ISO-8601",
+  "active_l0_sources": [],
+  "authorized_deltas": [],
+  "open_conflicts": [],
+  "pending_decisions": [],
+  "last_persistent_artifacts": [],
+  "last_state_hash": "sha256:optional"
+}
+```
+
+<Note>
+This is the schema-minimal shape only — it is not a valid first-install template. After bootstrap, `active_l0_sources` must contain entries for every inspected bootstrap surface. A state file with an empty `active_l0_sources` array is not a completed first-install state.
+</Note>
+
+The full schema is defined in `canon-boundary-guard-gpt/schemas/SESSION_STATE.schema.json`. Use `scripts/validate_state.py` to validate a state file against this schema.
+
+## First-install state creation
+
+The first-install rule controls when a new working state may be initialised. ChatGPT may create a new state at `/mnt/data/_SESSION_STATE.json` only when:
+
+- The operator explicitly declares a fresh install, **or**
+- The current task is the initial bundle installation and there is no prior-state claim.
+
+Before creating the working state, all of the following sources must be inspected:
+
+- `canon-boundary-guard-gpt/SKILL.md`
+- `canon-boundary-guard-gpt/references/protocol.md`
+- `canon-boundary-guard-gpt/references/gpt-project-adapter.md`
+- `canon-boundary-guard-gpt/references/state-and-recovery.md`
+- `canon-boundary-guard-gpt/schemas/SESSION_STATE.schema.json`
+
+After inspection, `active_l0_sources` must be populated with an entry for each inspected bootstrap surface. Each entry records only the surface that was actually inspected in this session — not the whole bundle. If `scripts/validate_state.py` is available, the created state must be validated before it is treated as available.
+
+The initialized state at `/mnt/data/_SESSION_STATE.json` is working state only. It becomes durable only after explicit export and re-upload, or after a Project Source save through the simulated gate.
+
+## Making state durable
+
+<Tabs>
+  <Tab title="Download and re-upload">
+    At the end of a session, ask ChatGPT to make the current `SESSION_STATE.json` available as a download:
+
+    ```text
+    Please make /mnt/data/_SESSION_STATE.json available for download.
+    ```
+
+    Save the file locally. At the start of the next session, upload it as a file attachment before your first message. ChatGPT will detect it during Status Check and use it to restore context.
+
+    This is the simplest option and works even without Projects access.
+  </Tab>
+  <Tab title="Save as Project Source">
+    To keep state permanently available across all chats in the Project, save the state file as a Project Source. This path requires gate approval:
+
+    ```text
+    Please save the current SESSION_STATE as a Project Source.
+    ```
+
+    ChatGPT will run the simulated gate, produce a dossier for the operation, and — if the gate passes — make the file available as a Project Source. Future sessions will find it automatically during Status Check.
+
+    Note that overwriting a Project Source counts as a Mode B or Mode C operation and will emit a CANON_STATE_DELTA.
+  </Tab>
+  <Tab title="Keep a CANON_STATE_DELTA">
+    After every Mode B or Mode C state-changing decision, ChatGPT emits a `CANON_STATE_DELTA` block labelled `[STATE DELTA - SAVE/PASTE ONLY AS RECOVERY MATERIAL]`. Copy the most recent delta block from the session.
+
+    At the start of the next session, paste the block in your first message:
+
+    ```text
+    Here is recovery material from the previous session:
+
+    ── CANON_STATE_DELTA ─────────────────────
+    ... (paste the full block here) ...
+    ─────────────────────────────────────────
+
+    Please use this to restore session context.
+    ```
+
+    ChatGPT will validate the delta, check that it includes a full `current_state` object, and — if valid — restore state from it. This approach requires no file management but depends on having saved the delta text before the session ended.
+  </Tab>
+</Tabs>
+
+## CANON_STATE_DELTA
+
+A `CANON_STATE_DELTA` is a self-contained snapshot delta emitted after every Mode B or Mode C state-changing decision. It is the primary unit of portable state.
+
+A valid `CANON_STATE_DELTA` must include all of the following fields:
+
+| Field | Description |
+|---|---|
+| `type` | Always `CANON_STATE_DELTA`. |
+| `seq` | Monotonically increasing sequence number relative to the session. |
+| `timestamp` | ISO-8601 timestamp of the delta. |
+| `basis` | Reference to the SESSION_STATE `state_seq` this delta was computed from. |
+| `decision` | Human-readable description of the state-changing decision. |
+| `current_state` | Full SESSION_STATE object at the time of the delta, validating against `SESSION_STATE.schema.json`. |
+| `operator_action_required` | Boolean — whether operator approval is still pending. |
+
+**Differential-only deltas are not valid recovery material.** A delta that lists only changed fields, without a complete `current_state` object, cannot be used to restore session context. ChatGPT will reject it as a recovery source and treat it as L1 text only.
+
+Validate deltas against `canon-boundary-guard-gpt/schemas/CANON_STATE_DELTA.schema.json` using `scripts/validate_state.py`.
+
+## Recovery mode
+
+If this is not a fresh install and no valid SESSION_STATE is available, ChatGPT enters **read-only recovery mode**. This applies when the state file is missing, cannot be validated, or when a supplied CANON_STATE_DELTA is invalid.
+
+<Tabs>
+  <Tab title="Allowed in recovery mode">
+    - Inspect Project Sources
+    - Inspect uploaded files
+    - List which state is missing and why
+    - Explain recovery options to the operator
+    - Prepare a recovery plan
+  </Tab>
+  <Tab title="Forbidden in recovery mode">
+    - Reconstruct state from chat memory or prior discussion
+    - Infer previously approved decisions from conversation context
+    - Write persistent artifacts
+    - Mark any content `[SAFE TO SAVE]`
+    - Perform Mode B or Mode C persistence operations
+  </Tab>
+</Tabs>
+
+## Accepted recovery sources
+
+ChatGPT accepts exactly three sources for exiting recovery mode:
+
+1. **Uploaded `SESSION_STATE.json`** — a previously exported state file uploaded as a file attachment. ChatGPT validates it against the schema before restoring.
+2. **Pasted `CANON_STATE_DELTA` with valid `current_state`** — the full delta block pasted in chat. The `current_state` object must be complete and schema-valid.
+3. **Explicit operator reconstruction marked as L1A** — the operator explicitly authorises a reconstruction from available evidence, and the result is recorded as an L1A delta in the current turn.
+
+<Warning>
+Reconstructing state from chat memory alone is not an accepted recovery source. ChatGPT must not infer prior approved decisions, L0 source lists, or authorized deltas from conversation context without explicit operator authorisation. Doing so would introduce unverified L3 material into the state, defeating the purpose of provenance control.
+</Warning>
+
+## Invalid delta behavior
+
+When a supplied CANON_STATE_DELTA is found to be invalid — missing required fields, failing schema validation, or containing only differential data without a full `current_state` — ChatGPT will:
+
+- **Reject** the delta as a recovery source.
+- **Treat** the pasted block as L1 recovery text only — available for reference but not admitted as state.
+- **Not reconstruct** state from the invalid delta unless the operator explicitly authorises an L1A reconstruction.
+
+ChatGPT will report why the delta was rejected and list what valid recovery sources are accepted.
+
+<CardGroup cols={2}>
+  <Card
+    title="SESSION_STATE Schema"
+    icon="file-code"
+    href="/reference/session-state-schema"
+  >
+    Full JSON Schema reference for the SESSION_STATE object, including all required fields and enum values.
+  </Card>
+  <Card
+    title="CANON_STATE_DELTA Schema"
+    icon="code-branch"
+    href="/reference/canon-state-delta-schema"
+  >
+    Full JSON Schema reference for CANON_STATE_DELTA, including delta metadata and current_state requirements.
+  </Card>
+</CardGroup>
